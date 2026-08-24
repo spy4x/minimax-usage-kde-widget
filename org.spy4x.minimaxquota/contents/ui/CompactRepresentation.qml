@@ -8,7 +8,7 @@ Item {
   implicitHeight: 40
 
   // Prefer the latest value pushed by the full representation.
-  // If the widget is only shown as compact (panel), we show a stale or default value.
+  // If the widget is only shown as compact (panel), we show stale or default value.
   property real minPercent: {
     const i = plasmoid.intervalData && plasmoid.intervalData.remainingPercent !== null
       ? plasmoid.intervalData.remainingPercent : 100
@@ -21,16 +21,16 @@ Item {
     anchors.fill: parent
     anchors.margins: 4
     radius: width / 2
-    color: compactRoot.minPercent < 20 ? "#d9534f"
-         : compactRoot.minPercent < 50 ? "#f0ad4e"
-         : "#5cb85c"
-    opacity: 0.75
+    color: compactRoot.minPercent < 20 ? "#ff5252"
+         : compactRoot.minPercent < 50 ? "#ffa726"
+         : "#3df0e0"
+    opacity: 0.85
   }
   Label {
     anchors.centerIn: parent
     text: compactRoot.minPercent !== null ? Math.round(compactRoot.minPercent) + "%" : "—"
     font.pixelSize: 10
     font.bold: true
-    color: "#ffffff"
+    color: "#0e1424"
   }
 }

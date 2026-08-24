@@ -8,63 +8,47 @@ import "."
 PlasmoidItem {
   id: root
 
-  // Persisted state held on the plasmoid so the compact representation can
-  // read it without re-fetching.
+  // ---------- state ----------
   property var intervalData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
   property var weeklyData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
   property string lastError: ""
-  property string lastUpdate: ""
   property bool loading: false
+  // Wall-clock time (ms) when the last successful fetch landed.
+  property real fetchedAt: 0
+  // Tick counter — bound by a 1-second timer so any UI reading liveResetMs
+  // re-evaluates and the countdowns decrement without a network call.
+  property int tickCount: 0
+  // Header clock string, refreshed every second.
+  property string clockText: Qt.formatDateTime(new Date(), "HH:mm:ss")
 
-  Component.onCompleted: Qt.callLater(fetch)
-
-  Timer {
-    id: refreshTimer
-    interval: Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60)) * 1000
-    repeat: true
-    running: (plasmoid.configuration.apiKey || "").length > 0
-    triggeredOnStart: true
-    onTriggered: root.fetch()
-  }
-
-  Connections {
-    target: plasmoid.configuration
-    function onApiKeyChanged() { refreshTimer.restart() }
-    function onRefreshIntervalSecChanged() { refreshTimer.interval = Math.max(15, plasmoid.configuration.refreshIntervalSec || 60) * 1000 }
-  }
-
+  // ---------- helpers ----------
   function cfgEndpoint() {
     return plasmoid.configuration.endpoint || "https://www.minimax.io/v1/token_plan/remains"
   }
 
-  function fetch() {
-    const apiKey = plasmoid.configuration.apiKey || ""
-    if (apiKey.length === 0) {
-      lastError = "API key not set. Configure via widget settings."
-      loading = false
-      return
-    }
-    loading = true
-    const xhr = new XMLHttpRequest()
-    xhr.open("GET", cfgEndpoint())
-    xhr.setRequestHeader("Authorization", "Bearer " + apiKey)
-    xhr.setRequestHeader("Content-Type", "application/json")
-    xhr.timeout = 10000
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState !== XMLHttpRequest.DONE) return
-      loading = false
-      if (xhr.status >= 200 && xhr.status < 300) {
-        root.parseResponse(xhr.responseText)
-      } else {
-        lastError = "HTTP " + xhr.status + " (" + xhr.statusText + ")"
-      }
-    }
-    try {
-      xhr.send()
-    } catch (e) {
-      loading = false
-      lastError = "Network error: " + e
-    }
+  // Adjusted reset ms: subtract elapsed time since the fetch.
+  readonly property real _now: Date.now() + tickCount * 0  // touch tickCount for re-bind
+
+  function liveResetMs(originalMs) {
+    if (originalMs === null || originalMs === undefined) return null
+    if (fetchedAt === 0) return originalMs
+    return Math.max(0, originalMs - (Date.now() - fetchedAt))
+  }
+
+  function usedFromRemaining(remainingPercent) {
+    if (remainingPercent === null || remainingPercent === undefined || isNaN(remainingPercent)) return 0
+    return Math.max(0, Math.min(100, 100 - remainingPercent))
+  }
+
+  function formatDuration(ms) {
+    if (ms === null || ms === undefined || isNaN(ms) || ms < 0) return "—"
+    const totalSec = Math.floor(ms / 1000)
+    const days = Math.floor(totalSec / 86400)
+    const hours = Math.floor((totalSec % 86400) / 3600)
+    const minutes = Math.floor((totalSec % 3600) / 60)
+    if (days > 0) return days + "d " + hours + "h"
+    if (hours > 0) return hours + " hr " + minutes + " min"
+    return minutes + " min"
   }
 
   function parseResponse(text) {
@@ -104,136 +88,203 @@ PlasmoidItem {
       usedCount: general.current_weekly_usage_count
     }
     lastError = ""
-    lastUpdate = Qt.formatDateTime(new Date(), "yyyy-MM-dd HH:mm:ss")
-    // Expose to plasmoid so the compact rep can read
+    fetchedAt = Date.now()
+    // Expose to plasmoid so the compact rep can read.
     plasmoid.intervalData = intervalData
     plasmoid.weeklyData = weeklyData
   }
 
-  function formatDuration(ms) {
-    if (ms === null || ms === undefined || isNaN(ms) || ms < 0) return "—"
-    const totalSec = Math.floor(ms / 1000)
-    const days = Math.floor(totalSec / 86400)
-    const hours = Math.floor((totalSec % 86400) / 3600)
-    const minutes = Math.floor((totalSec % 3600) / 60)
-    if (days > 0) return days + "d " + hours + "h"
-    if (hours > 0) return hours + " hr " + minutes + " min"
-    return minutes + " min"
+  function fetch() {
+    const apiKey = plasmoid.configuration.apiKey || ""
+    if (apiKey.length === 0) {
+      lastError = "API key not set. Configure via widget settings."
+      loading = false
+      return
+    }
+    loading = true
+    const xhr = new XMLHttpRequest()
+    xhr.open("GET", cfgEndpoint())
+    xhr.setRequestHeader("Authorization", "Bearer " + apiKey)
+    xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.timeout = 10000
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== XMLHttpRequest.DONE) return
+      loading = false
+      if (xhr.status >= 200 && xhr.status < 300) {
+        root.parseResponse(xhr.responseText)
+      } else {
+        lastError = "HTTP " + xhr.status + " (" + xhr.statusText + ")"
+      }
+    }
+    try {
+      xhr.send()
+    } catch (e) {
+      loading = false
+      lastError = "Network error: " + e
+    }
   }
 
-  function usedFromRemaining(remainingPercent) {
-    if (remainingPercent === null || remainingPercent === undefined || isNaN(remainingPercent)) return 0
-    return Math.max(0, Math.min(100, 100 - remainingPercent))
+  // ---------- timers ----------
+  Timer {
+    id: refreshTimer
+    interval: Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60)) * 1000
+    repeat: true
+    running: (plasmoid.configuration.apiKey || "").length > 0
+    triggeredOnStart: true
+    onTriggered: root.fetch()
+  }
+  Timer {
+    id: tickTimer
+    interval: 1000
+    repeat: true
+    running: true
+    triggeredOnStart: true
+    onTriggered: {
+      root.tickCount++
+      root.clockText = Qt.formatDateTime(new Date(), "HH:mm:ss")
+    }
   }
 
-  function barColor(usedPercent) {
-    if (usedPercent < 70) return "#5cb85c"
-    if (usedPercent < 90) return "#f0ad4e"
-    return "#d9534f"
+  Connections {
+    target: plasmoid.configuration
+    function onApiKeyChanged() { refreshTimer.restart() }
+    function onRefreshIntervalSecChanged() { refreshTimer.interval = Math.max(15, plasmoid.configuration.refreshIntervalSec || 60) * 1000 }
   }
 
+  Component.onCompleted: Qt.callLater(fetch)
+
+  // ---------- UI ----------
   Rectangle {
     anchors.fill: parent
-    color: PlasmaCore.Theme.backgroundColor
-    border.color: Qt.darker(PlasmaCore.Theme.separatorColor, 1.4)
-    border.width: 1
-    radius: 8
+    color: "#0e1424"
+    radius: 12
   }
 
   ColumnLayout {
     anchors.fill: parent
-    anchors.margins: 14
-    spacing: 10
+    anchors.margins: 18
+    spacing: 14
 
+    // Header
     RowLayout {
       Layout.fillWidth: true
-      spacing: 6
+      spacing: 10
 
+      Rectangle {
+        width: 8
+        height: 8
+        radius: 4
+        color: "#5cb85c"
+      }
       Label {
-        text: "MiniMax Token Plan"
+        text: "TOKEN PLAN"
+        color: "#e8edf5"
+        font.pixelSize: 13
         font.bold: true
-        font.pixelSize: 14
-        color: PlasmaCore.Theme.textColor
+        font.letterSpacing: 2
       }
       Item { Layout.fillWidth: true }
       Label {
-        text: root.lastUpdate ? "updated " + root.lastUpdate : "not yet fetched"
-        font.pixelSize: 10
-        color: PlasmaCore.Theme.subTextColor
-      }
-      BusyIndicator {
-        running: root.loading
-        visible: root.loading
-        implicitWidth: 14
-        implicitHeight: 14
+        text: root.clockText
+        color: "#8a93a8"
+        font.pixelSize: 13
+        font.family: "monospace"
       }
       Button {
-        text: "Refresh"
-        font.pixelSize: 10
-        padding: 4
+        text: "↻ Refresh"
+        font.pixelSize: 11
+        padding: 6
         onClicked: root.fetch()
         visible: (plasmoid.configuration.apiKey || "").length > 0
       }
     }
 
+    // Empty-state hint
     Rectangle {
       Layout.fillWidth: true
+      Layout.fillHeight: true
       visible: (plasmoid.configuration.apiKey || "").length === 0
-      color: PlasmaCore.Theme.linkColor
-      opacity: 0.16
-      radius: 6
-      implicitHeight: 40
+      color: "#161d2f"
+      border.color: "#252b3d"
+      border.width: 1
+      radius: 12
       Label {
         anchors.centerIn: parent
         text: "Right-click widget → Configure MiniMax Quota → paste your API key"
-        color: PlasmaCore.Theme.textColor
-        font.pixelSize: 11
+        color: "#e8edf5"
+        font.pixelSize: 13
       }
     }
 
-    Label {
-      Layout.fillWidth: true
-      text: root.lastError
-      visible: root.lastError.length > 0
-      color: "#d9534f"
-      font.pixelSize: 11
-      wrapMode: Text.Wrap
-    }
-
-    QuotaBar {
-      Layout.fillWidth: true
-      label: "5h limit"
-      resetText: "Resets in " + root.formatDuration(root.intervalData.resetMs)
-      remainingPercent: root.intervalData.remainingPercent
-      formatFn: root.formatDuration
-      usedFn: root.usedFromRemaining
-      colorFn: root.barColor
-    }
-
+    // Error banner
     Rectangle {
       Layout.fillWidth: true
-      implicitHeight: 1
-      color: PlasmaCore.Theme.separatorColor
-      opacity: 0.5
-      visible: root.intervalData.remainingPercent !== null && root.weeklyData.remainingPercent !== null
+      visible: root.lastError.length > 0 && (plasmoid.configuration.apiKey || "").length > 0
+      color: "#161d2f"
+      border.color: "#ff5252"
+      border.width: 1
+      radius: 8
+      implicitHeight: errLabel.implicitHeight + 16
+      Label {
+        id: errLabel
+        anchors.fill: parent
+        anchors.margins: 8
+        text: root.lastError
+        color: "#ff8a80"
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+        verticalAlignment: Text.AlignVCenter
+      }
     }
 
-    QuotaBar {
+    // Two cards side by side
+    RowLayout {
       Layout.fillWidth: true
-      label: "Weekly limit"
-      resetText: "Resets in " + root.formatDuration(root.weeklyData.resetMs)
-      remainingPercent: root.weeklyData.remainingPercent
-      formatFn: root.formatDuration
-      usedFn: root.usedFromRemaining
-      colorFn: root.barColor
+      Layout.fillHeight: true
+      spacing: 14
+      visible: (plasmoid.configuration.apiKey || "").length > 0
+
+      QuotaCard {
+        id: intervalCard
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        label: "5-HOUR WINDOW"
+        remainingPercent: root.intervalData.remainingPercent
+        resetMs: root.liveResetMs(root.intervalData.resetMs)
+        formatFn: root.formatDuration
+      }
+      QuotaCard {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        label: "WEEKLY"
+        remainingPercent: root.weeklyData.remainingPercent
+        resetMs: root.liveResetMs(root.weeklyData.resetMs)
+        formatFn: root.formatDuration
+      }
     }
 
-    Label {
+    // Footer
+    RowLayout {
       Layout.fillWidth: true
-      horizontalAlignment: Text.AlignHCenter
-      font.pixelSize: 9
-      color: PlasmaCore.Theme.subTextColor
-      text: "Polling every " + Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60)) + "s — click Refresh for instant update"
+      spacing: 8
+      Label {
+        text: "Polling " + Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60))
+              + "s · live ticking"
+        color: "#8a93a8"
+        font.pixelSize: 11
+      }
+      Item { Layout.fillWidth: true }
+      Rectangle {
+        width: 8
+        height: 8
+        radius: 4
+        color: root.loading ? "#ffa726" : "#5cb85c"
+      }
+      Label {
+        text: root.loading ? "Loading" : "Live"
+        color: "#8a93a8"
+        font.pixelSize: 11
+      }
     }
   }
 }

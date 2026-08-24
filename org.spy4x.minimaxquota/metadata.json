@@ -4,7 +4,7 @@
     "Id": "org.spy4x.minimaxquota",
     "Name": "MiniMax Quota",
     "Description": "MiniMax M3 token plan 5h and weekly quota usage with reset countdowns",
-    "Version": "1.0.6",
+    "Version": "1.1.0",
     "License": "MIT",
     "Website": "https://github.com/spy4x/minimax-usage-kde-widget",
     "Authors": [
@@ -14,7 +14,7 @@
   },
   "X-Plasma-API-Minimum-Version": "6.0",
   "X-Plasma-MainScript": "ui/main.qml",
-  "X-Plasma-DefaultSize": [ 480, 300 ],
-  "X-Plasma-MinimumSize": [ 380, 220 ],
+  "X-Plasma-DefaultSize": [ 640, 420 ],
+  "X-Plasma-MinimumSize": [ 520, 340 ],
   "X-Plasma-Config": "config/config.qml"
 }

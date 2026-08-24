@@ -1,0 +1,23 @@
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Node
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+
+# Secrets (this repo has none, but be safe)
+.env
+.env.*
+*.age
+secrets/
+*api_key*
+*api-key*
+*apikey*
+*secret*
+*token*

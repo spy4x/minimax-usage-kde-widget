@@ -1,0 +1,22 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.spy4x.minimaxquota",
+    "Name": "MiniMax Quota",
+    "Description": "MiniMax M3 token plan 5h and weekly quota usage with reset countdowns",
+    "Icon": "speedometer",
+    "Version": "1.0.0",
+    "License": "MIT",
+    "Website": "https://github.com/spy4x/minimax-usage-kde-widget",
+    "Authors": [
+      { "Name": "Anton Shubin", "Email": "anton@neatsoft.dev" }
+      ],
+    "Category": "System Information"
+  },
+  "X-Plasma-API-MinimumVersion": "6.0",
+  "X-Plasma-API": "6.0",
+  "X-Plasma-MainScript": "ui/main.qml",
+  "X-Plasma-DefaultSize": [ 420, 220 ],
+  "X-Plasma-MinimumSize": [ 280, 140 ],
+  "X-Plasma-Config": "config/main.qml"
+}

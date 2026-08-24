@@ -1,9 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import org.kde.plasma.plasmoid
 import "."
 
-Item {
+PlasmoidItem {
   id: root
 
   // Persisted state held on the plasmoid so the compact representation can

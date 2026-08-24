@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import org.kde.plasma.core as PlasmaCore
 
 ColumnLayout {
   id: barRoot
@@ -31,12 +32,12 @@ ColumnLayout {
       Layout.preferredWidth: 170
       Label {
         text: barRoot.label
-        color: theme.textColor
+        color: PlasmaCore.Theme.textColor
         font.pixelSize: 13
       }
       Label {
         text: barRoot.resetText
-        color: theme.subTextColor
+        color: PlasmaCore.Theme.subTextColor
         font.pixelSize: 10
       }
     }
@@ -46,13 +47,13 @@ ColumnLayout {
       Layout.alignment: Qt.AlignRight
       Label {
         text: barRoot.hasData ? "Total quota " + Math.round(100 - barRoot.usedPercent) + "%" : "Total quota —"
-        color: theme.textColor
+        color: PlasmaCore.Theme.textColor
         font.pixelSize: 13
         horizontalAlignment: Text.AlignRight
       }
       Label {
         text: barRoot.hasData ? "Used " + Math.round(barRoot.usedPercent) + "%" : "Used —"
-        color: theme.subTextColor
+        color: PlasmaCore.Theme.subTextColor
         font.pixelSize: 11
         horizontalAlignment: Text.AlignRight
       }
@@ -63,7 +64,7 @@ ColumnLayout {
     Layout.fillWidth: true
     implicitHeight: 6
     radius: 3
-    color: Qt.lighter(theme.backgroundColor, 1.6)
+    color: Qt.lighter(PlasmaCore.Theme.backgroundColor, 1.6)
 
     Rectangle {
       anchors.left: parent.left
@@ -73,7 +74,7 @@ ColumnLayout {
       radius: 3
       color: barRoot.hasData
         ? barRoot.colorFn(barRoot.usedPercent)
-        : Qt.lighter(theme.backgroundColor, 1.3)
+        : Qt.lighter(PlasmaCore.Theme.backgroundColor, 1.3)
     }
   }
 }

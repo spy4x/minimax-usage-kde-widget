@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
 import "."
 
@@ -133,8 +134,8 @@ PlasmoidItem {
 
   Rectangle {
     anchors.fill: parent
-    color: theme.backgroundColor
-    border.color: theme.separatorColor
+    color: PlasmaCore.Theme.backgroundColor
+    border.color: PlasmaCore.Theme.separatorColor
     border.width: 1
     radius: 8
   }
@@ -152,7 +153,7 @@ PlasmoidItem {
         text: "MiniMax Token Plan"
         font.bold: true
         font.pixelSize: 16
-        color: theme.textColor
+        color: PlasmaCore.Theme.textColor
       }
       Item { Layout.fillWidth: true }
       BusyIndicator {
@@ -164,7 +165,7 @@ PlasmoidItem {
       Label {
         text: root.lastUpdate ? "updated " + root.lastUpdate : "not yet fetched"
         font.pixelSize: 10
-        color: theme.subTextColor
+        color: PlasmaCore.Theme.subTextColor
       }
       Button {
         text: "Refresh"
@@ -177,14 +178,14 @@ PlasmoidItem {
     Rectangle {
       Layout.fillWidth: true
       visible: (plasmoid.configuration.apiKey || "").length === 0
-      color: theme.linkColor
+      color: PlasmaCore.Theme.linkColor
       opacity: 0.18
       radius: 6
       implicitHeight: 44
       Label {
         anchors.centerIn: parent
         text: "Right-click widget → Configure MiniMax Quota → paste your API key"
-        color: theme.textColor
+        color: PlasmaCore.Theme.textColor
         font.pixelSize: 12
       }
     }
@@ -224,7 +225,7 @@ PlasmoidItem {
       Layout.fillWidth: true
       horizontalAlignment: Text.AlignHCenter
       font.pixelSize: 9
-      color: theme.subTextColor
+      color: PlasmaCore.Theme.subTextColor
       text: "Polling every " + Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60)) + "s — click Refresh for instant update"
     }
   }

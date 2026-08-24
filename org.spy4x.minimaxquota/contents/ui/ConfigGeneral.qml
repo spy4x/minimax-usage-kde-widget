@@ -1,65 +1,61 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as QQC2
 import QtQuick.Layouts
-import org.kde.kcmutils as KCM
+import org.kde.kcmutils as KCMUtils
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
-KCM.SimpleKCM {
-  id: configRoot
+KCMUtils.SimpleKCM {
+  id: configGeneral
 
-  // The `cfg_` prefix binds these to plasmoid.configuration.<name>.
-  property alias cfg_apiKey: apiKeyField.text
+  // Direct bindings to Plasmoid.configuration.<name>
+  property string cfg_apiKey: Plasmoid.configuration.apiKey
+  property string cfg_endpoint: Plasmoid.configuration.endpoint
+
+  // Aliases bind to control properties
   property alias cfg_refreshIntervalSec: refreshField.value
-  property alias cfg_endpoint: endpointField.text
 
-  GridLayout {
-    columns: 2
-    rowSpacing: 10
-    columnSpacing: 8
+  Kirigami.FormLayout {
     anchors.fill: parent
-    anchors.margins: 12
+    wideMode: true
 
-    Label {
-      text: "API Key:"
-      Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-    }
-    TextField {
+    QQC2.TextField {
       id: apiKeyField
+      Kirigami.FormData.label: i18n("API Key:")
       Layout.fillWidth: true
       placeholderText: "sk-cp-..."
       echoMode: TextInput.Password
       selectByMouse: true
       font.family: "monospace"
+      text: configGeneral.cfg_apiKey
+      onTextChanged: configGeneral.cfg_apiKey = text
     }
 
-    Label {
-      text: "Refresh (sec):"
-      Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-    }
-    SpinBox {
+    QQC2.SpinBox {
       id: refreshField
+      Kirigami.FormData.label: i18n("Refresh (sec):")
       from: 15
       to: 3600
       stepSize: 15
-      value: 60
       editable: true
       Layout.fillWidth: true
     }
 
-    Label {
-      text: "Endpoint:"
-      Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-    }
-    TextField {
+    QQC2.TextField {
       id: endpointField
+      Kirigami.FormData.label: i18n("Endpoint:")
       Layout.fillWidth: true
       placeholderText: "https://www.minimax.io/v1/token_plan/remains"
       font.family: "monospace"
+      text: configGeneral.cfg_endpoint
+      onTextChanged: configGeneral.cfg_endpoint = text
     }
 
-    Item { Layout.columnSpan: 2; Layout.fillHeight: true }
+    Item {
+      Kirigami.FormData.isSection: true
+    }
 
-    Label {
-      Layout.columnSpan: 2
+    QQC2.Label {
       Layout.fillWidth: true
       wrapMode: Text.Wrap
       font.pixelSize: 10

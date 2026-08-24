@@ -8,6 +8,13 @@ import "."
 PlasmoidItem {
   id: root
 
+  // Default size on first add. metadata.json X-Plasma-DefaultSize is read
+  // by Plasma 6 but PlasmoidItem also needs these implicit dimensions
+  // so the widget renders correctly when previewed in the Add Widgets
+  // dialog (which uses QML rendering at constrained size).
+  implicitWidth: 640
+  implicitHeight: 420
+
   // ---------- state ----------
   property var intervalData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
   property var weeklyData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })

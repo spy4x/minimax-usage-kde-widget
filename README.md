@@ -1,19 +1,23 @@
 # MiniMax Quota — KDE Plasma 6 Widget
 
 Plasma 6 plasmoid that shows your MiniMax M3 Token Plan usage — both the
-5-hour and weekly windows — with live reset countdowns. Designed to sit on
-a secondary monitor and remind you to use the quota.
+5-hour and weekly windows — with live reset countdowns. Two concentric
+rings per card let you see at a glance whether you're pacing your
+consumption against the window.
 
-![widget preview placeholder](docs/screenshot-placeholder.png)
+![widget preview](docs/preview.png)
 
 ## Features
 
-- **5-hour window** progress bar with reset countdown.
-- **Weekly window** progress bar with reset countdown.
-- Color-coded bars: green → orange → red as you consume more.
-- Manual refresh button + automatic polling (configurable, default 60s).
-- API key never hardcoded — entered once via the widget's config dialog.
-- API key persisted via `QtCore.Settings` (0600 file recommended).
+- **5-hour window** card with concentric rings: outer = time elapsed,
+  inner = quota used. Compare the two to spot over- or under-utilization.
+- **Weekly window** card with the same layout.
+- **Color-coded** inner ring: cyan → orange (< 1h reset) → red (< 30m reset).
+- **Live-ticking** countdowns (subtract elapsed since fetch each second).
+- **Live clock** in the header.
+- **Manual refresh** button + auto-polling (configurable, default 60s).
+- API key entered once via the widget's config dialog, stored via
+  `QtCore.Settings` in `~/.config/plasma-workspace/`. Never in the repo.
 
 ## Install (KDE Plasma 6 desktop)
 
@@ -34,8 +38,9 @@ Then:
    format `sk-cp-...`)
 6. Click OK. Widget polls within ~1 second.
 
-If widgets don't appear, run `plasmoidreload` in a terminal, or log out
-and back in (Wayland often requires a full session restart).
+`install.sh` copies the plasmoid into `~/.local/share/plasma/plasmoids/`
+(not symlinks) so Syncthing races against `~/sync/code/` can't wipe the
+install. After QML/JSON edits, re-run `./install.sh` to refresh the copy.
 
 ## API
 
@@ -74,13 +79,16 @@ for `model_name == "general"` and displays:
 org.spy4x.minimaxquota/     # the plasmoid source
 ├── metadata.json
 └── contents/
-    ├── config/main.qml     # configuration dialog
+    ├── config/
+    │   ├── config.qml         # ConfigModel with General category
+    │   └── ui/ConfigGeneral.qml  # configuration dialog form
     └── ui/
-        ├── main.qml         # full representation (the tile you see)
+        ├── main.qml            # full representation (the tile you see)
         ├── CompactRepresentation.qml
-        └── QuotaBar.qml     # reusable progress row
-install.sh                   # symlink into ~/.local/share/plasma/plasmoids/
-scripts/smoke-test.mjs       # node test for parsing & formatting
+        └── QuotaCard.qml       # reusable card with concentric rings
+install.sh                     # copy into ~/.local/share/plasma/plasmoids/
+scripts/smoke-test.mjs         # node test for parsing & formatting
+docs/preview.png               # widget screenshot
 ```
 
 ## Development / testing without KDE

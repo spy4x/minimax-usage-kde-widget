@@ -11,6 +11,7 @@ KCMUtils.SimpleKCM {
   // Direct bindings to Plasmoid.configuration.<name>
   property string cfg_apiKey: Plasmoid.configuration.apiKey
   property string cfg_endpoint: Plasmoid.configuration.endpoint
+  property string cfg_orientation: Plasmoid.configuration.orientation || "horizontal"
 
   // Aliases bind to control properties
   property alias cfg_refreshIntervalSec: refreshField.value
@@ -49,6 +50,20 @@ KCMUtils.SimpleKCM {
       font.family: "monospace"
       text: configGeneral.cfg_endpoint
       onTextChanged: configGeneral.cfg_endpoint = text
+    }
+
+    QQC2.ComboBox {
+      id: orientationCombo
+      Kirigami.FormData.label: i18n("Layout:")
+      Layout.fillWidth: true
+      model: [
+        { text: i18n("Horizontal (side by side)"), value: "horizontal" },
+        { text: i18n("Vertical (stacked)"), value: "vertical" }
+      ]
+      textRole: "text"
+      valueRole: "value"
+      currentIndex: configGeneral.cfg_orientation === "vertical" ? 1 : 0
+      onActivated: configGeneral.cfg_orientation = model[currentIndex].value
     }
 
     Item {

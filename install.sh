@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Install the MiniMax Quota plasmoid into user-local Plasma 6.
-# Copies (not symlinks) so Syncthing races against ~/sync/code/ don't
-# wipe the install when another device deletes the repo path.
-# Re-run after editing QML to refresh the copy.
+# Copies (not symlinks) so the install survives if the source repo
+# is moved, renamed, or wiped. Re-run after editing QML to refresh.
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

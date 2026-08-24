@@ -12,8 +12,8 @@ PlasmoidItem {
   // by Plasma 6 but PlasmoidItem also needs these implicit dimensions
   // so the widget renders correctly when previewed in the Add Widgets
   // dialog (which uses QML rendering at constrained size).
-  implicitWidth: 640
-  implicitHeight: 420
+  implicitWidth: 960
+  implicitHeight: 630
 
   // ---------- state ----------
   property var intervalData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
@@ -244,31 +244,63 @@ PlasmoidItem {
       }
     }
 
-    // Two cards side by side
-    RowLayout {
+    // Two cards: orientation picked from config (horizontal default,
+    // vertical for narrow panels). Loader swaps between two Components
+    // since QML Layouts can't switch row<->column direction at runtime.
+    Loader {
       Layout.fillWidth: true
       Layout.fillHeight: true
-      spacing: 14
       visible: (plasmoid.configuration.apiKey || "").length > 0
-
-      QuotaCard {
-        id: intervalCard
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        label: "5-HOUR WINDOW"
-        remainingPercent: root.intervalData.remainingPercent
-        resetMs: root.liveResetMs(root.intervalData.resetMs)
-        windowTotalMs: 5 * 60 * 60 * 1000
-        formatFn: root.formatDuration
+      sourceComponent: (plasmoid.configuration.orientation || "horizontal") === "vertical"
+        ? verticalCards : horizontalCards
+    }
+    Component {
+      id: horizontalCards
+      RowLayout {
+        spacing: 14
+        QuotaCard {
+          id: intervalCard
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          label: "5-HOUR WINDOW"
+          remainingPercent: root.intervalData.remainingPercent
+          resetMs: root.liveResetMs(root.intervalData.resetMs)
+          windowTotalMs: 5 * 60 * 60 * 1000
+          formatFn: root.formatDuration
+        }
+        QuotaCard {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          label: "WEEKLY"
+          remainingPercent: root.weeklyData.remainingPercent
+          resetMs: root.liveResetMs(root.weeklyData.resetMs)
+          windowTotalMs: 7 * 24 * 60 * 60 * 1000
+          formatFn: root.formatDuration
+        }
       }
-      QuotaCard {
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        label: "WEEKLY"
-        remainingPercent: root.weeklyData.remainingPercent
-        resetMs: root.liveResetMs(root.weeklyData.resetMs)
-        windowTotalMs: 7 * 24 * 60 * 60 * 1000
-        formatFn: root.formatDuration
+    }
+    Component {
+      id: verticalCards
+      ColumnLayout {
+        spacing: 14
+        QuotaCard {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          label: "5-HOUR WINDOW"
+          remainingPercent: root.intervalData.remainingPercent
+          resetMs: root.liveResetMs(root.intervalData.resetMs)
+          windowTotalMs: 5 * 60 * 60 * 1000
+          formatFn: root.formatDuration
+        }
+        QuotaCard {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          label: "WEEKLY"
+          remainingPercent: root.weeklyData.remainingPercent
+          resetMs: root.liveResetMs(root.weeklyData.resetMs)
+          windowTotalMs: 7 * 24 * 60 * 60 * 1000
+          formatFn: root.formatDuration
+        }
       }
     }
 

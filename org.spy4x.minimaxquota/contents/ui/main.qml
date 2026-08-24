@@ -251,6 +251,7 @@ PlasmoidItem {
         label: "5-HOUR WINDOW"
         remainingPercent: root.intervalData.remainingPercent
         resetMs: root.liveResetMs(root.intervalData.resetMs)
+        windowTotalMs: 5 * 60 * 60 * 1000
         formatFn: root.formatDuration
       }
       QuotaCard {
@@ -259,6 +260,7 @@ PlasmoidItem {
         label: "WEEKLY"
         remainingPercent: root.weeklyData.remainingPercent
         resetMs: root.liveResetMs(root.weeklyData.resetMs)
+        windowTotalMs: 7 * 24 * 60 * 60 * 1000
         formatFn: root.formatDuration
       }
     }

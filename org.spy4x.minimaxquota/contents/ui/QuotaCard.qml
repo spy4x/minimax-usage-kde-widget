@@ -22,10 +22,11 @@ Rectangle {
   readonly property real usedPercent: hasData
     ? Math.max(0, Math.min(100, 100 - remainingPercent))
     : -1
-  // Outer ring: percent of the window still remaining. e.g. 3h left of 5h = 60%.
-  readonly property real timeRemainingPercent: {
+  // Outer ring: percent of the window already ELAPSED. So 3h left of 5h
+  // means 40% elapsed, the outer ring fills to 40% (consumption-style).
+  readonly property real timeElapsedPercent: {
     if (!hasData || resetMs === null || resetMs === undefined) return -1
-    return Math.max(0, Math.min(100, (resetMs / windowTotalMs) * 100))
+    return Math.max(0, Math.min(100, (1 - resetMs / windowTotalMs) * 100))
   }
 
   // Inner ring color tied to time-until-reset: cyan when plenty,
@@ -56,7 +57,7 @@ Rectangle {
       height: ringArea.ringSize
       anchors.centerIn: parent
 
-      // Outer track — time remaining ring background
+      // Outer track — time-elapsed ring background
       ShapePath {
         strokeColor: "#1f2940"
         strokeWidth: 5
@@ -71,7 +72,7 @@ Rectangle {
           sweepAngle: 360
         }
       }
-      // Outer arc — time remaining in window
+      // Outer arc — time elapsed in window (fills as time passes)
       ShapePath {
         strokeColor: "#5a8db0"
         strokeWidth: 5
@@ -83,11 +84,11 @@ Rectangle {
           radiusX: Math.min(ringShape.width, ringShape.height) / 2 - 3
           radiusY: radiusX
           startAngle: -90
-          sweepAngle: cardRoot.timeRemainingPercent >= 0 ? 360 * cardRoot.timeRemainingPercent / 100 : 0
+          sweepAngle: cardRoot.timeElapsedPercent >= 0 ? 360 * cardRoot.timeElapsedPercent / 100 : 0
         }
       }
 
-      // Inner track — quota used ring background
+      // Inner track — quota-used ring background
       ShapePath {
         strokeColor: "#252b3d"
         strokeWidth: 7
@@ -102,7 +103,7 @@ Rectangle {
           sweepAngle: 360
         }
       }
-      // Inner arc — quota used
+      // Inner arc — quota used (fills as you consume)
       ShapePath {
         strokeColor: cardRoot.innerColor
         strokeWidth: 7
@@ -120,16 +121,16 @@ Rectangle {
     }
 
     // Center text overlay (in the inner ring's hole)
+    // Layout: big "% left" on top, label in middle, countdown below.
     ColumnLayout {
       anchors.centerIn: ringShape
       spacing: 4
 
       Label {
-        text: cardRoot.hasData ? cardRoot.formatFn(cardRoot.resetMs) : "—"
-        color: cardRoot.innerColor
+        text: cardRoot.hasData ? Math.round(100 - cardRoot.usedPercent) + "% left" : "—"
+        color: "#e8edf5"
         font.pixelSize: 26
         font.bold: true
-        font.family: "monospace"
         horizontalAlignment: Text.AlignHCenter
         Layout.alignment: Qt.AlignHCenter
       }
@@ -143,9 +144,10 @@ Rectangle {
         Layout.alignment: Qt.AlignHCenter
       }
       Label {
-        text: cardRoot.hasData ? Math.round(100 - cardRoot.usedPercent) + "% left" : "—"
-        color: "#e8edf5"
-        font.pixelSize: 12
+        text: cardRoot.hasData ? "reset " + cardRoot.formatFn(cardRoot.resetMs) : "—"
+        color: cardRoot.innerColor
+        font.pixelSize: 11
+        font.family: "monospace"
         horizontalAlignment: Text.AlignHCenter
         Layout.alignment: Qt.AlignHCenter
       }

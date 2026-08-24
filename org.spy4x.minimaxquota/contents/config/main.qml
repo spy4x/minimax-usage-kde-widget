@@ -1,8 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import org.kde.kcmutils as KCM
 
-Item {
+KCM.SimpleKCM {
   id: configRoot
 
   // The `cfg_` prefix binds these to plasmoid.configuration.<name>.

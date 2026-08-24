@@ -6,10 +6,19 @@ ColumnLayout {
   id: barRoot
   property string label: ""
   property string resetText: ""
-  property real remainingPercent: 0
+  // var (not real) so null is preserved — QML coerces null to 0 on real,
+  // which makes a "no data" state look like 100% used / red.
+  property var remainingPercent: null
   property var formatFn: function(ms) { return "—" }
   property var usedFn: function(rp) { return 0 }
   property var colorFn: function(used) { return "#5cb85c" }
+
+  readonly property bool hasData: remainingPercent !== null && remainingPercent !== undefined
+  readonly property real usedPercent: {
+    if (!hasData) return -1
+    const v = usedFn(remainingPercent)
+    return (v === null || v === undefined || isNaN(v)) ? -1 : v
+  }
 
   spacing: 4
 
@@ -36,13 +45,13 @@ ColumnLayout {
       spacing: 0
       Layout.alignment: Qt.AlignRight
       Label {
-        text: "Total quota 100%"
+        text: barRoot.hasData ? "Total quota " + Math.round(100 - barRoot.usedPercent) + "%" : "Total quota —"
         color: theme.textColor
         font.pixelSize: 13
         horizontalAlignment: Text.AlignRight
       }
       Label {
-        text: "Used " + Math.round(barRoot.usedFn(barRoot.remainingPercent)) + "%"
+        text: barRoot.hasData ? "Used " + Math.round(barRoot.usedPercent) + "%" : "Used —"
         color: theme.subTextColor
         font.pixelSize: 11
         horizontalAlignment: Text.AlignRight
@@ -60,9 +69,11 @@ ColumnLayout {
       anchors.left: parent.left
       anchors.top: parent.top
       anchors.bottom: parent.bottom
-      width: parent.width * Math.max(0, Math.min(100, barRoot.usedFn(barRoot.remainingPercent))) / 100
+      width: parent.width * (barRoot.hasData ? Math.max(0, Math.min(100, barRoot.usedPercent)) / 100 : 0)
       radius: 3
-      color: barRoot.colorFn(barRoot.usedFn(barRoot.remainingPercent))
+      color: barRoot.hasData
+        ? barRoot.colorFn(barRoot.usedPercent)
+        : Qt.lighter(theme.backgroundColor, 1.3)
     }
   }
 }

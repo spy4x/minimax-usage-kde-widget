@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Install the MiniMax Quota plasmoid into user-local Plasma 6.
+# Copies (not symlinks) so Syncthing races against ~/sync/code/ don't
+# wipe the install when another device deletes the repo path.
+# Re-run after editing QML to refresh the copy.
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -14,16 +17,16 @@ fi
 
 mkdir -p "$(dirname "$DEST")"
 
-# Replace any existing install (file or symlink) so we always end up with a
-# fresh symlink to the working tree.
+# Replace any existing install (file, dir, or symlink) so we always end up
+# with a fresh copy of the source.
 if [ -e "$DEST" ] || [ -L "$DEST" ]; then
   echo "Replacing existing install at $DEST"
   rm -rf "$DEST"
 fi
 
-ln -s "$SRC" "$DEST"
+cp -r "$SRC" "$DEST"
 
-echo "Linked: $DEST -> $SRC"
+echo "Installed: $DEST (copy from $SRC)"
 echo
 cat <<'EOF'
 Next steps on your KDE Plasma 6 desktop:
@@ -33,8 +36,9 @@ Next steps on your KDE Plasma 6 desktop:
   4. Right-click the widget -> "Configure MiniMax Quota..."
   5. Paste your Token Plan Subscription Key (sk-cp-...) -> OK
 
+After editing QML/JSON, re-run ./install.sh to refresh the install copy.
 If widgets don't appear, run from a terminal:
-  plasmoidreload
+  busctl --user call org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.refreshCurrentShell 0
 
 Or log out and back in (Wayland sessions often need a full restart).
 EOF

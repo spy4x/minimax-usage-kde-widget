@@ -21,19 +21,21 @@ ColumnLayout {
     return (v === null || v === undefined || isNaN(v)) ? -1 : v
   }
 
-  spacing: 4
+  spacing: 3
 
   RowLayout {
     Layout.fillWidth: true
-    spacing: 8
+    spacing: 6
 
     ColumnLayout {
-      spacing: 0
-      Layout.preferredWidth: 170
+      spacing: 1
+      Layout.fillWidth: true
+      Layout.minimumWidth: 80
       Label {
         text: barRoot.label
         color: PlasmaCore.Theme.textColor
-        font.pixelSize: 13
+        font.pixelSize: 12
+        font.bold: true
       }
       Label {
         text: barRoot.resetText
@@ -41,20 +43,20 @@ ColumnLayout {
         font.pixelSize: 10
       }
     }
-    Item { Layout.fillWidth: true }
     ColumnLayout {
-      spacing: 0
+      spacing: 1
       Layout.alignment: Qt.AlignRight
       Label {
-        text: barRoot.hasData ? "Total quota " + Math.round(100 - barRoot.usedPercent) + "%" : "Total quota —"
+        text: barRoot.hasData ? Math.round(100 - barRoot.usedPercent) + "% left" : "—"
         color: PlasmaCore.Theme.textColor
-        font.pixelSize: 13
+        font.pixelSize: 12
+        font.bold: true
         horizontalAlignment: Text.AlignRight
       }
       Label {
-        text: barRoot.hasData ? "Used " + Math.round(barRoot.usedPercent) + "%" : "Used —"
+        text: barRoot.hasData ? Math.round(barRoot.usedPercent) + "% used" : "—"
         color: PlasmaCore.Theme.subTextColor
-        font.pixelSize: 11
+        font.pixelSize: 10
         horizontalAlignment: Text.AlignRight
       }
     }
@@ -62,9 +64,9 @@ ColumnLayout {
 
   Rectangle {
     Layout.fillWidth: true
-    implicitHeight: 6
+    implicitHeight: 5
     radius: 3
-    color: Qt.lighter(PlasmaCore.Theme.backgroundColor, 1.6)
+    color: Qt.darker(PlasmaCore.Theme.backgroundColor, 1.25)
 
     Rectangle {
       anchors.left: parent.left
@@ -74,7 +76,7 @@ ColumnLayout {
       radius: 3
       color: barRoot.hasData
         ? barRoot.colorFn(barRoot.usedPercent)
-        : Qt.lighter(PlasmaCore.Theme.backgroundColor, 1.3)
+        : "transparent"
     }
   }
 }

@@ -135,41 +135,42 @@ PlasmoidItem {
   Rectangle {
     anchors.fill: parent
     color: PlasmaCore.Theme.backgroundColor
-    border.color: PlasmaCore.Theme.separatorColor
+    border.color: Qt.darker(PlasmaCore.Theme.separatorColor, 1.4)
     border.width: 1
     radius: 8
   }
 
   ColumnLayout {
     anchors.fill: parent
-    anchors.margins: 16
-    spacing: 12
+    anchors.margins: 14
+    spacing: 10
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
+      spacing: 6
 
       Label {
         text: "MiniMax Token Plan"
         font.bold: true
-        font.pixelSize: 16
+        font.pixelSize: 14
         color: PlasmaCore.Theme.textColor
       }
       Item { Layout.fillWidth: true }
-      BusyIndicator {
-        running: root.loading
-        visible: root.loading
-        implicitWidth: 16
-        implicitHeight: 16
-      }
       Label {
         text: root.lastUpdate ? "updated " + root.lastUpdate : "not yet fetched"
         font.pixelSize: 10
         color: PlasmaCore.Theme.subTextColor
       }
+      BusyIndicator {
+        running: root.loading
+        visible: root.loading
+        implicitWidth: 14
+        implicitHeight: 14
+      }
       Button {
         text: "Refresh"
         font.pixelSize: 10
+        padding: 4
         onClicked: root.fetch()
         visible: (plasmoid.configuration.apiKey || "").length > 0
       }
@@ -179,14 +180,14 @@ PlasmoidItem {
       Layout.fillWidth: true
       visible: (plasmoid.configuration.apiKey || "").length === 0
       color: PlasmaCore.Theme.linkColor
-      opacity: 0.18
+      opacity: 0.16
       radius: 6
-      implicitHeight: 44
+      implicitHeight: 40
       Label {
         anchors.centerIn: parent
         text: "Right-click widget → Configure MiniMax Quota → paste your API key"
         color: PlasmaCore.Theme.textColor
-        font.pixelSize: 12
+        font.pixelSize: 11
       }
     }
 
@@ -209,6 +210,14 @@ PlasmoidItem {
       colorFn: root.barColor
     }
 
+    Rectangle {
+      Layout.fillWidth: true
+      implicitHeight: 1
+      color: PlasmaCore.Theme.separatorColor
+      opacity: 0.5
+      visible: root.intervalData.remainingPercent !== null && root.weeklyData.remainingPercent !== null
+    }
+
     QuotaBar {
       Layout.fillWidth: true
       label: "Weekly limit"
@@ -218,8 +227,6 @@ PlasmoidItem {
       usedFn: root.usedFromRemaining
       colorFn: root.barColor
     }
-
-    Item { Layout.fillHeight: true }
 
     Label {
       Layout.fillWidth: true

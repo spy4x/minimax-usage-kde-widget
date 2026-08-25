@@ -75,6 +75,39 @@ function usedFromRemaining(rp) {
   return Math.max(0, Math.min(100, 100 - rp));
 }
 
+// Mirror of HistoryStore.qml logic (Node test target).
+function append(arr, p) {
+  return arr.concat([{ ts: Date.now(), p }]);
+}
+
+function prune(arr, retentionDays) {
+  const limit = Math.max(1, retentionDays) * 86400000;
+  // Use a synthetic "now" for testability — pass via parameter.
+  const now = arguments[2] !== undefined ? arguments[2] : Date.now();
+  return arr.filter(e => now - e.ts <= limit);
+}
+
+function downsample(points, maxBars) {
+  if (points.length === 0) return [];
+  if (points.length <= maxBars) return points;
+  const bucket = points.length / maxBars;
+  const out = [];
+  for (let i = 0; i < maxBars; i++) {
+    const start = Math.floor(i * bucket);
+    const end = Math.min(points.length, Math.floor((i + 1) * bucket));
+    if (start >= end) continue;
+    let minV = 100, maxV = 0, sumTs = 0, n = 0;
+    for (let j = start; j < end; j++) {
+      if (points[j].p < minV) minV = points[j].p;
+      if (points[j].p > maxV) maxV = points[j].p;
+      sumTs += points[j].ts;
+      n++;
+    }
+    out.push({ ts: n > 0 ? Math.floor(sumTs / n) : 0, p: minV, minP: minV, maxP: maxV });
+  }
+  return out;
+}
+
 const tests = [
   {
     name: "parses general model entry",
@@ -153,6 +186,109 @@ const tests = [
     fn: () => {
       const r = parseResponse({ base_resp: { status_code: 0, status_msg: "ok" } });
       if (!r.error) throw new Error("expected error");
+    },
+  },
+  // ---- history ----
+  {
+    name: "history append adds sample",
+    fn: () => {
+      const arr = [];
+      const a1 = append(arr, 80);
+      if (a1.length !== 1) throw new Error("length");
+      if (a1[0].p !== 80) throw new Error("value");
+      if (typeof a1[0].ts !== "number") throw new Error("ts");
+    },
+  },
+  {
+    name: "history prune drops entries older than retention",
+    fn: () => {
+      const now = 1_700_000_000_000;
+      const arr = [
+        { ts: now - 1 * 86400000, p: 90 },   // 1 day ago
+        { ts: now - 5 * 86400000, p: 80 },   // 5 days ago
+        { ts: now - 10 * 86400000, p: 70 },  // 10 days ago
+      ];
+      const kept = prune(arr, 7, now);
+      if (kept.length !== 2) throw new Error("expected 2 kept, got " + kept.length);
+      if (kept[0].p !== 90 || kept[1].p !== 80) throw new Error("wrong values kept");
+    },
+  },
+  {
+    name: "history prune keeps everything within retention",
+    fn: () => {
+      const now = 1_700_000_000_000;
+      const arr = [
+        { ts: now - 1 * 86400000, p: 90 },
+        { ts: now - 3 * 86400000, p: 80 },
+        { ts: now - 6 * 86400000, p: 70 },
+      ];
+      const kept = prune(arr, 7, now);
+      if (kept.length !== 3) throw new Error("expected 3 kept, got " + kept.length);
+    },
+  },
+  {
+    name: "history prune clamps minimum retention to 1 day",
+    fn: () => {
+      const now = 1_700_000_000_000;
+      const arr = [
+        { ts: now - 0.5 * 86400000, p: 90 },
+        { ts: now - 2 * 86400000, p: 80 },
+      ];
+      // Pass retentionDays=0 — should clamp to 1 day, dropping the 2-day entry.
+      const kept = prune(arr, 0, now);
+      if (kept.length !== 1) throw new Error("expected 1 kept, got " + kept.length);
+    },
+  },
+  {
+    name: "history downsample keeps all points when count <= maxBars",
+    fn: () => {
+      const arr = [
+        { ts: 1000, p: 80 },
+        { ts: 2000, p: 70 },
+        { ts: 3000, p: 60 },
+      ];
+      const ds = downsample(arr, 10);
+      if (ds.length !== 3) throw new Error("expected 3, got " + ds.length);
+      if (ds[1].p !== 70) throw new Error("value");
+    },
+  },
+  {
+    name: "history downsample collapses to maxBars buckets with min",
+    fn: () => {
+      // 1000 points → 5 buckets of 200
+      const arr = [];
+      for (let i = 0; i < 1000; i++) arr.push({ ts: i * 1000, p: i % 100 });
+      const ds = downsample(arr, 5);
+      if (ds.length !== 5) throw new Error("expected 5 buckets, got " + ds.length);
+      // Each bucket holds the min of its slice. Values cycle i % 100, so
+      // every bucket's min is 0.
+      if (ds[0].p !== 0) throw new Error("bucket 0 min");
+      if (ds[0].maxP !== 99) throw new Error("bucket 0 max (expected 99 from i=99)");
+      if (ds[4].p !== 0) throw new Error("bucket 4 min (expected 0)");
+      if (ds[4].maxP !== 99) throw new Error("bucket 4 max");
+    },
+  },
+  {
+    name: "history downsample records min/max envelope per bucket",
+    fn: () => {
+      const arr = [
+        { ts: 0, p: 80 },
+        { ts: 1, p: 30 },   // min in bucket
+        { ts: 2, p: 95 },   // max in bucket
+        { ts: 3, p: 50 },
+      ];
+      const ds = downsample(arr, 1);
+      if (ds.length !== 1) throw new Error("expected 1 bucket");
+      if (ds[0].p !== 30) throw new Error("min not used as bar value");
+      if (ds[0].minP !== 30) throw new Error("minP");
+      if (ds[0].maxP !== 95) throw new Error("maxP");
+    },
+  },
+  {
+    name: "history downsample handles empty array",
+    fn: () => {
+      const ds = downsample([], 10);
+      if (ds.length !== 0) throw new Error("expected empty");
     },
   },
 ];

@@ -18,13 +18,18 @@ pacing your consumption against the window.
 - **Weekly window** card with the same layout.
 - **Color-coded** inner ring: cyan when safe → orange (< 1h reset) →
   red (< 30m reset).
+- **Stats view** with two bar charts: 5-hour window over the last 7 days,
+  weekly window over the last 3 months. Shows current, average, and
+  peak usage. Click the **Stats** tab in the header to switch.
 - **Live-ticking** countdowns (subtract elapsed since fetch each second —
   no network call to decrement).
 - **Live clock** in the header (HH:MM:SS, ticks every second).
-- **Manual refresh** button + auto-polling (configurable, default 60s,
-  range 15–3600s).
+- **Manual refresh** button + auto-polling (configurable, default **300s
+  / 5 min**, range 60–3600s).
 - **Layout switch** in config: horizontal (cards side-by-side, default)
   or vertical (stacked, for narrow panels).
+- **History retention** configurable per window (default 7d for 5h,
+  90d for weekly). Clear button wipes stored history.
 - **API key** entered once via the widget's config dialog, stored via
   `QtCore.Settings` in `~/.config/plasma-workspace/`. **Never** in the repo,
   never in logs, never on the wire except as a Bearer token to MiniMax.
@@ -69,9 +74,33 @@ Right-click the widget → **Configure MiniMax Quota...**
 | Field | Default | Notes |
 |---|---|---|
 | **API Key** | *(empty)* | MiniMax subscription key, `sk-cp-...`. Stored via `QtCore.Settings`. |
-| **Refresh (sec)** | `60` | Poll interval. Range 15–3600. 60s is a sensible default. |
+| **Refresh (sec)** | `300` | Poll interval. Range 60–3600. 5 min is conservative; lower if you want more responsive updates. |
 | **Endpoint** | `https://www.minimax.io/v1/token_plan/remains` | Override only if MiniMax changes the URL. |
 | **Layout** | `Horizontal` | `Horizontal` = cards side by side. `Vertical` = cards stacked (use for narrow panels). |
+| **Collect history** | `on` | When off, no samples are stored and the Stats tab shows an empty chart. |
+| **5h retention (days)** | `7` | Oldest 5-hour-window samples older than this are dropped on every save. |
+| **Weekly retention (days)** | `90` | Same, for the weekly window. |
+| **Clear history now** | — | Wipes stored samples for both windows after confirmation. |
+
+## Reading the stats view
+
+Click the **Stats** tab in the header to switch from the live rings to a
+historical view. Two stacked bar charts:
+
+- **5-hour window — last 7 days**: one bar per ~7 minutes of recorded
+  data (max 200 bars shown). Useful for spotting peak usage hours.
+- **Weekly window — last 90 days**: one bar per ~6 hours. Spans three
+  monthly reset cycles so you can compare how aggressively you used
+  quota across billing cycles.
+
+Each chart shows three numbers on the right: `now` (current usage,
+color-coded), `avg` (average used % over the window), and `peak`
+(highest used % reached). Bars are colored the same as the live rings:
+cyan < 70%, orange < 90%, red ≥ 90%.
+
+Empty state: if you just installed, the chart shows *"Collecting data —
+check back after a few hours"*. The first sample lands within seconds of
+the first successful fetch.
 
 ## Reading the rings
 
@@ -136,7 +165,10 @@ org.spy4x.minimaxquota/           # the plasmoid source
     └── ui/
         ├── main.qml              # full representation (the tile you see)
         ├── CompactRepresentation.qml
-        └── QuotaCard.qml         # reusable card with concentric rings
+        ├── QuotaCard.qml         # reusable card with concentric rings
+        ├── HistoryStore.qml      # persistence (QtCore.Settings, JSON)
+        ├── HistoryChart.qml      # bar chart component with min/max envelope
+        └── StatsView.qml         # stacked charts for both windows
 install.sh                        # copy into ~/.local/share/plasma/plasmoids/
 scripts/smoke-test.mjs            # node test for parsing & formatting
 docs/
@@ -160,9 +192,9 @@ CHANGELOG.md
 node scripts/smoke-test.mjs
 ```
 
-This validates the response parsing, `formatDuration`, and
-`usedFromRemaining` logic without needing Plasma installed.
-9/9 should pass.
+This validates the response parsing, `formatDuration`, `usedFromRemaining`,
+history append/prune, and downsample logic without needing Plasma
+installed. 17/17 should pass.
 
 ### Iterate on QML
 

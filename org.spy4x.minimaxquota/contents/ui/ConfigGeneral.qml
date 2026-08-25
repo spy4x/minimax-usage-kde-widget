@@ -15,6 +15,10 @@ KCMUtils.SimpleKCM {
 
   // Aliases bind to control properties
   property alias cfg_refreshIntervalSec: refreshField.value
+  property alias cfg_historyEnabled: historyEnabledBox.checked
+  property alias cfg_intervalRetentionDays: intervalRetentionField.value
+  property alias cfg_weeklyRetentionDays: weeklyRetentionField.value
+  property bool cfg_historyClearRequested: Plasmoid.configuration.historyClearRequested === true
 
   Kirigami.FormLayout {
     anchors.fill: parent
@@ -35,10 +39,11 @@ KCMUtils.SimpleKCM {
     QQC2.SpinBox {
       id: refreshField
       Kirigami.FormData.label: i18n("Refresh (sec):")
-      from: 15
+      from: 60
       to: 3600
-      stepSize: 15
+      stepSize: 30
       editable: true
+      value: 300
       Layout.fillWidth: true
     }
 
@@ -64,6 +69,66 @@ KCMUtils.SimpleKCM {
       valueRole: "value"
       currentIndex: configGeneral.cfg_orientation === "vertical" ? 1 : 0
       onActivated: configGeneral.cfg_orientation = model[currentIndex].value
+    }
+
+    Item {
+      Kirigami.FormData.isSection: true
+      Kirigami.FormData.label: i18n("History & Stats")
+    }
+
+    QQC2.CheckBox {
+      id: historyEnabledBox
+      Kirigami.FormData.label: i18n("Collect history:")
+      text: i18n("Store quota samples for the stats charts")
+      checked: configGeneral.cfg_historyEnabled !== false
+      onToggled: configGeneral.cfg_historyEnabled = checked
+    }
+
+    QQC2.SpinBox {
+      id: intervalRetentionField
+      Kirigami.FormData.label: i18n("5h retention (days):")
+      from: 1
+      to: 30
+      stepSize: 1
+      editable: true
+      value: 7
+      Layout.fillWidth: true
+      enabled: historyEnabledBox.checked
+    }
+
+    QQC2.SpinBox {
+      id: weeklyRetentionField
+      Kirigami.FormData.label: i18n("Weekly retention (days):")
+      from: 7
+      to: 365
+      stepSize: 7
+      editable: true
+      value: 90
+      Layout.fillWidth: true
+      enabled: historyEnabledBox.checked
+    }
+
+    QQC2.Button {
+      text: i18n("Clear history now")
+      Layout.fillWidth: true
+      enabled: historyEnabledBox.checked
+      onClicked: clearConfirmDialog.open()
+    }
+
+    Kirigami.Dialog {
+      id: clearConfirmDialog
+      title: i18n("Clear stored history?")
+      QQC2.Label {
+        text: i18n("Removes every collected sample for both windows. " +
+                   "Charts will start empty until new data accumulates. " +
+                   "This does not affect the API key or other settings.")
+        wrapMode: Text.Wrap
+      }
+      standardButtons: Kirigami.Dialog.No | Kirigami.Dialog.Yes
+      onAccepted: {
+        Plasmoid.configuration.historyClearRequested = true
+        clearConfirmDialog.close()
+      }
     }
 
     Item {

@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Stats view**: a second tab in the widget header that swaps the live
+  rings for two stacked bar charts (5h window / last 7 days, weekly
+  window / last 90 days). Each chart shows `now`, `avg`, `peak` usage
+  with color-coded bars matching the rings.
+- History persistence via `QtCore.Settings` (category `History`,
+  appended on every successful fetch, flushed every 30s + on unload).
+- History downsampling for display (max 200 bars per chart, preserves
+  min/max envelope per bucket).
+- Config fields: **Collect history** (bool), **5h retention (days)**,
+  **Weekly retention (days)**, **Clear history now** button.
+
+### Changed
+- Default poll interval raised from 60s to **300s (5 min)**.
+  Minimum allowed interval raised from 15s to 60s. Lowers API load and
+  keeps stored history file size manageable.
+
 ## [1.2.0] — 2026-08-24
 
 ### Added

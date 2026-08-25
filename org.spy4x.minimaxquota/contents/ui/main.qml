@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtCore
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
 import "."
@@ -27,6 +28,10 @@ PlasmoidItem {
   property int tickCount: 0
   // Header clock string, refreshed every second.
   property string clockText: Qt.formatDateTime(new Date(), "HH:mm:ss")
+  // View mode: 0 = current quota (rings), 1 = stats (history charts).
+  property int viewMode: 0
+
+  HistoryStore { id: historyStore }
 
   // ---------- helpers ----------
   function cfgEndpoint() {
@@ -99,6 +104,10 @@ PlasmoidItem {
     // Expose to plasmoid so the compact rep can read.
     plasmoid.intervalData = intervalData
     plasmoid.weeklyData = weeklyData
+    // Append to history unless explicitly disabled.
+    if (plasmoid.configuration.historyEnabled !== false) {
+      historyStore.append(intervalData.remainingPercent, weeklyData.remainingPercent)
+    }
   }
 
   function fetch() {
@@ -134,7 +143,7 @@ PlasmoidItem {
   // ---------- timers ----------
   Timer {
     id: refreshTimer
-    interval: Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60)) * 1000
+    interval: Math.max(60, (plasmoid.configuration.refreshIntervalSec || 300)) * 1000
     repeat: true
     running: (plasmoid.configuration.apiKey || "").length > 0
     triggeredOnStart: true
@@ -151,14 +160,50 @@ PlasmoidItem {
       root.clockText = Qt.formatDateTime(new Date(), "HH:mm:ss")
     }
   }
+  // History flush: writes pending samples to disk every 30s and at unload.
+  Timer {
+    id: flushTimer
+    interval: 30000
+    repeat: true
+    running: true
+    triggeredOnStart: false
+    onTriggered: historyStore.flush(
+      plasmoid.configuration.intervalRetentionDays || 7,
+      plasmoid.configuration.weeklyRetentionDays || 90
+    )
+  }
 
   Connections {
     target: plasmoid.configuration
     function onApiKeyChanged() { refreshTimer.restart() }
-    function onRefreshIntervalSecChanged() { refreshTimer.interval = Math.max(15, plasmoid.configuration.refreshIntervalSec || 60) * 1000 }
+    function onRefreshIntervalSecChanged() { refreshTimer.interval = Math.max(60, plasmoid.configuration.refreshIntervalSec || 300) * 1000 }
+    function onIntervalRetentionDaysChanged() { historyStore.flush(
+      plasmoid.configuration.intervalRetentionDays || 7,
+      plasmoid.configuration.weeklyRetentionDays || 90
+    ) }
+    function onWeeklyRetentionDaysChanged() { historyStore.flush(
+      plasmoid.configuration.intervalRetentionDays || 7,
+      plasmoid.configuration.weeklyRetentionDays || 90
+    ) }
+    function onHistoryClearRequestedChanged() {
+      if (plasmoid.configuration.historyClearRequested === true) {
+        historyStore.clearAll(
+          plasmoid.configuration.intervalRetentionDays || 7,
+          plasmoid.configuration.weeklyRetentionDays || 90
+        )
+        plasmoid.configuration.historyClearRequested = false
+      }
+    }
   }
 
-  Component.onCompleted: Qt.callLater(fetch)
+  Component.onCompleted: {
+    historyStore.load()
+    Qt.callLater(fetch)
+  }
+  Component.onDestruction: historyStore.flush(
+    plasmoid.configuration.intervalRetentionDays || 7,
+    plasmoid.configuration.weeklyRetentionDays || 90
+  )
 
   // ---------- UI ----------
   Rectangle {
@@ -191,6 +236,58 @@ PlasmoidItem {
         font.letterSpacing: 2
       }
       Item { Layout.fillWidth: true }
+      // Quota / Stats tab toggle
+      Rectangle {
+        Layout.preferredWidth: 130
+        Layout.preferredHeight: 28
+        radius: 6
+        color: "#0a0f1c"
+        border.color: "#252b3d"
+        border.width: 1
+
+        Row {
+          anchors.fill: parent
+          anchors.margins: 2
+          spacing: 0
+
+          Rectangle {
+            width: parent.width / 2
+            height: parent.height
+            radius: 4
+            color: root.viewMode === 0 ? "#252b3d" : "transparent"
+            Label {
+              anchors.centerIn: parent
+              text: "Quota"
+              color: root.viewMode === 0 ? "#e8edf5" : "#8a93a8"
+              font.pixelSize: 11
+              font.bold: root.viewMode === 0
+            }
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.viewMode = 0
+            }
+          }
+          Rectangle {
+            width: parent.width / 2
+            height: parent.height
+            radius: 4
+            color: root.viewMode === 1 ? "#252b3d" : "transparent"
+            Label {
+              anchors.centerIn: parent
+              text: "Stats"
+              color: root.viewMode === 1 ? "#e8edf5" : "#8a93a8"
+              font.pixelSize: 11
+              font.bold: root.viewMode === 1
+            }
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.viewMode = 1
+            }
+          }
+        }
+      }
       Label {
         text: root.clockText
         color: "#8a93a8"
@@ -251,8 +348,10 @@ PlasmoidItem {
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: (plasmoid.configuration.apiKey || "").length > 0
-      sourceComponent: (plasmoid.configuration.orientation || "horizontal") === "vertical"
-        ? verticalCards : horizontalCards
+      sourceComponent: root.viewMode === 1
+        ? statsContent
+        : ((plasmoid.configuration.orientation || "horizontal") === "vertical"
+            ? verticalCards : horizontalCards)
     }
     Component {
       id: horizontalCards
@@ -303,13 +402,20 @@ PlasmoidItem {
         }
       }
     }
+    Component {
+      id: statsContent
+      StatsView {
+        intervalPoints: historyStore.interval
+        weeklyPoints: historyStore.weekly
+      }
+    }
 
     // Footer
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
       Label {
-        text: "Polling " + Math.max(15, (plasmoid.configuration.refreshIntervalSec || 60))
+        text: "Polling " + Math.max(60, (plasmoid.configuration.refreshIntervalSec || 300))
               + "s · live ticking"
         color: "#8a93a8"
         font.pixelSize: 11

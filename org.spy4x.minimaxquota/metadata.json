@@ -3,8 +3,8 @@
   "KPlugin": {
     "Id": "org.spy4x.minimaxquota",
     "Name": "MiniMax Quota",
-    "Description": "MiniMax M3 token plan 5h and weekly quota usage with reset countdowns",
-    "Version": "1.2.0",
+    "Description": "MiniMax M3 token plan 5h and weekly quota usage with reset countdowns and stats charts",
+    "Version": "1.3.0",
     "License": "MIT",
     "Website": "https://github.com/spy4x/minimax-usage-kde-widget",
     "Authors": [

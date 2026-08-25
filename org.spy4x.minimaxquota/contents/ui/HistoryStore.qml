@@ -7,8 +7,16 @@ import QtQuick
 // via dirtyCount and the flush() method. Stored as a single JSON string
 // in QtCore.Settings under category "History" so it lands in the same
 // KConfig file the widget already uses but in its own group.
-QtObject {
+//
+// Implementation note: root type is `Item` (not `QtObject`) so that the
+// inner Settings child can be assigned via the default `data` property.
+// QtObject has no default property and would reject nested children.
+// visible:false + zero size keeps this instance off the layout/screen.
+Item {
   id: store
+  visible: false
+  width: 0
+  height: 0
 
   Settings {
     id: settings

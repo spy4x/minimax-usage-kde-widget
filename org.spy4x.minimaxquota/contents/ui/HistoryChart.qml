@@ -65,16 +65,17 @@ Item {
       const start = Math.floor(i * bucket)
       const end = Math.min(points.length, Math.floor((i + 1) * bucket))
       if (start >= end) continue
-      let minV = 100, maxV = 0, sumTs = 0, n = 0
+      let minV = 100, maxV = 0, sumP = 0, sumTs = 0, n = 0
       for (let j = start; j < end; j++) {
         if (points[j].p < minV) minV = points[j].p
         if (points[j].p > maxV) maxV = points[j].p
+        sumP += points[j].p
         sumTs += points[j].ts
         n++
       }
       out.push({
         ts: n > 0 ? Math.floor(sumTs / n) : 0,
-        p: minV,
+        p: n > 0 ? Math.floor(sumP / n) : 0,
         minP: minV,
         maxP: maxV
       })

@@ -92,14 +92,20 @@ function downsample(points, maxBars) {
     const start = Math.floor(i * bucket);
     const end = Math.min(points.length, Math.floor((i + 1) * bucket));
     if (start >= end) continue;
-    let minV = 100, maxV = 0, sumTs = 0, n = 0;
+    let minV = 100, maxV = 0, sumP = 0, sumTs = 0, n = 0;
     for (let j = start; j < end; j++) {
       if (points[j].p < minV) minV = points[j].p;
       if (points[j].p > maxV) maxV = points[j].p;
+      sumP += points[j].p;
       sumTs += points[j].ts;
       n++;
     }
-    out.push({ ts: n > 0 ? Math.floor(sumTs / n) : 0, p: minV, minP: minV, maxP: maxV });
+    out.push({
+      ts: n > 0 ? Math.floor(sumTs / n) : 0,
+      p: n > 0 ? Math.floor(sumP / n) : 0,
+      minP: minV,
+      maxP: maxV,
+    });
   }
   return out;
 }
@@ -322,23 +328,24 @@ const tests = [
     },
   },
   {
-    name: "history downsample collapses to maxBars buckets with min",
+    name: "history downsample collapses to maxBars buckets with avg p",
     fn: () => {
-      // 1000 points → 5 buckets of 200
+      // 1000 points → 5 buckets of 200. Values cycle i % 100, so each bucket
+      // contains two full cycles (0..99, 0..99). Average per bucket =
+      // (sum of 0..99 twice) / 200 = 9900/200 = 49.5 → floor 49.
       const arr = [];
       for (let i = 0; i < 1000; i++) arr.push({ ts: i * 1000, p: i % 100 });
       const ds = downsample(arr, 5);
       if (ds.length !== 5) throw new Error("expected 5 buckets, got " + ds.length);
-      // Each bucket holds the min of its slice. Values cycle i % 100, so
-      // every bucket's min is 0.
-      if (ds[0].p !== 0) throw new Error("bucket 0 min");
-      if (ds[0].maxP !== 99) throw new Error("bucket 0 max (expected 99 from i=99)");
-      if (ds[4].p !== 0) throw new Error("bucket 4 min (expected 0)");
-      if (ds[4].maxP !== 99) throw new Error("bucket 4 max");
+      if (ds[0].p !== 49) throw new Error("bucket 0 avg p (expected 49, got " + ds[0].p + ")");
+      if (ds[0].minP !== 0) throw new Error("bucket 0 minP");
+      if (ds[0].maxP !== 99) throw new Error("bucket 0 maxP (expected 99 from i=99)");
+      if (ds[4].p !== 49) throw new Error("bucket 4 avg p (expected 49)");
+      if (ds[4].maxP !== 99) throw new Error("bucket 4 maxP");
     },
   },
   {
-    name: "history downsample records min/max envelope per bucket",
+    name: "history downsample records avg/min/max envelope per bucket",
     fn: () => {
       const arr = [
         { ts: 0, p: 80 },
@@ -346,9 +353,10 @@ const tests = [
         { ts: 2, p: 95 },   // max in bucket
         { ts: 3, p: 50 },
       ];
+      // avg p = (80 + 30 + 95 + 50) / 4 = 255/4 = 63.75 → floor 63
       const ds = downsample(arr, 1);
       if (ds.length !== 1) throw new Error("expected 1 bucket");
-      if (ds[0].p !== 30) throw new Error("min not used as bar value");
+      if (ds[0].p !== 63) throw new Error("avg p not used as bar value (got " + ds[0].p + ")");
       if (ds[0].minP !== 30) throw new Error("minP");
       if (ds[0].maxP !== 95) throw new Error("maxP");
     },

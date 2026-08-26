@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-08-26
+
+### Fixed
+- **Stats charts: bar metric.** Each bucket's bar height now uses the
+  average remaining percentage (not the min), so buckets with no usage
+  spike no longer collapse to height 0. Previously only the peak bucket
+  was visible, making the chart look like "one column".
+
 ## [1.5.0] — 2026-08-26
 
 ### Added

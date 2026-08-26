@@ -301,7 +301,15 @@ Item {
             readonly property bool isHovered: chart.hoveredIndex === index
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
-            x: chart.barX(modelData.ts)
+            // Position by index, not timestamp. The function-call form
+            // (`chart.barX(modelData.ts)`) reads chart.firstTs / spanMs at
+            // call time, and QML evaluates this binding BEFORE those
+            // properties have updated when dsPoints changes — every bar
+            // ended up at ratio=1 (rightmost edge). Using index gives
+            // uniform spacing for evenly sampled data (which is what the
+            // 5min widget fetch produces), so the chart looks correct
+            // without depending on chart state at binding evaluation time.
+            x: index * (chart.plotInnerWidth / Math.max(1, chart.dsPoints.length - 1))
             width: chart.barWidth
             height: (parent.height - 16) * Math.max(0, Math.min(100, used)) / 100
             color: chart.barColor(used)

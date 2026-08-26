@@ -158,6 +158,77 @@ function namespaceOf(apiKey) {
   return Math.abs(h).toString(36);
 }
 
+// Mirror of HistoryStore.qml seedFakeHistory(). Deterministic sawtooth
+// per (interval, weekly) window. Returns the same shape as the QML impl:
+// { ok, intervalSamples, weeklySamples }.
+function seedFakeHistory(intervalDays, weeklyDays, now = Date.now()) {
+  const sampleMs = 5 * 60 * 1000;
+  const fiveHours = 5 * 60 * 60 * 1000;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+  const interval = [];
+  const intStart = now - Math.max(1, intervalDays || 7) * 86400000;
+  for (let t = intStart; t <= now; t += sampleMs) {
+    const wIdx = Math.floor(t / fiveHours);
+    const wStart = wIdx * fiveHours;
+    const pos = (t - wStart) / fiveHours;
+    const endR = 20 + ((wIdx * 7919) % 60);
+    const base = 100 - pos * (100 - endR);
+    const noise = (((wIdx * 31) ^ Math.floor(t / sampleMs)) % 7) - 3;
+    const r = Math.max(0, Math.min(100, Math.round(base + noise)));
+    interval.push({ ts: t, p: r });
+  }
+
+  const weekly = [];
+  const wkStart = now - Math.max(1, weeklyDays || 90) * 86400000;
+  for (let t = wkStart; t <= now; t += sampleMs) {
+    const wIdx = Math.floor(t / sevenDays);
+    const wStart = wIdx * sevenDays;
+    const pos = (t - wStart) / sevenDays;
+    const endR = 30 + ((wIdx * 6151) % 50);
+    const base = 100 - pos * (100 - endR);
+    const noise = (((wIdx * 47) ^ Math.floor(t / sampleMs)) % 7) - 3;
+    const r = Math.max(0, Math.min(100, Math.round(base + noise)));
+    weekly.push({ ts: t, p: r });
+  }
+
+  return {
+    ok: true,
+    intervalSamples: interval.length,
+    weeklySamples: weekly.length,
+    interval,
+    weekly,
+  };
+}
+
+// Mirror of HistoryStore.qml backup/restore semantics. We don't have real
+// Settings here, so we model the backup slot as a plain string.
+function backupState(mainData) {
+  return mainData || "";
+}
+function hasBackup(backupSlot) {
+  return typeof backupSlot === "string" && backupSlot.length > 0;
+}
+function restoreBackup(backupSlot) {
+  if (!hasBackup(backupSlot)) return { ok: false, error: "No backup to restore." };
+  try {
+    const parsed = JSON.parse(backupSlot);
+    if (!parsed || typeof parsed !== "object") return { ok: false, error: "Backup is corrupted." };
+    return { ok: true, blob: backupSlot, samples: countSamples(parsed) };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+function countSamples(obj) {
+  let n = 0;
+  for (const k in obj) {
+    const s = obj[k];
+    if (s && Array.isArray(s.interval)) n += s.interval.length;
+    if (s && Array.isArray(s.weekly)) n += s.weekly.length;
+  }
+  return n;
+}
+
 // Mirror of HistoryStore.qml load() — legacy single-namespace shape gets
 // migrated to the current namespace so users coming from the previous
 // version keep their data. When no namespace is configured yet (empty
@@ -508,6 +579,108 @@ const tests = [
       const out = migrateLegacyBlob(blob, ns);
       if (out.migrated) throw new Error("already migrated, but flagged as migrated");
       if (!out.slice || out.slice.interval.length !== 1) throw new Error("slice missing");
+    },
+  },
+  // ---- seed / backup ----
+  {
+    name: "seedFakeHistory: interval sample count ≈ 7d at 5min sampling",
+    fn: () => {
+      const res = seedFakeHistory(7, 90);
+      if (!res.ok) throw new Error("ok flag");
+      // 7 days = 7 * 288 = 2016 samples (allow 1-2 sample boundary slack).
+      if (res.intervalSamples < 2014 || res.intervalSamples > 2018) {
+        throw new Error("intervalSamples out of range: " + res.intervalSamples);
+      }
+      // Weekly: 90 days = 90 / 7 = 12.86 windows × 2016 = ~25920
+      if (res.weeklySamples < 25900 || res.weeklySamples > 25940) {
+        throw new Error("weeklySamples out of range: " + res.weeklySamples);
+      }
+    },
+  },
+  {
+    name: "seedFakeHistory: produces varying remaining values (multiple buckets visible)",
+    fn: () => {
+      const res = seedFakeHistory(7, 90);
+      // Downsample to 200 buckets per window count and check that MOST
+      // buckets have a bar (avg remaining < 100 → USED > 0 → visible).
+      const dsI = downsample(res.interval, 200);
+      const dsW = downsample(res.weekly, 200);
+      const visibleI = dsI.filter(b => 100 - b.p > 0.5).length;
+      const visibleW = dsW.filter(b => 100 - b.p > 0.5).length;
+      // With sawtooth varying endRemaining per window, nearly every
+      // bucket should be visible. Allow ≥ 90% to absorb edge cases.
+      if (visibleI < dsI.length * 0.9) {
+        throw new Error(`interval visible=${visibleI}/${dsI.length}`);
+      }
+      if (visibleW < dsW.length * 0.9) {
+        throw new Error(`weekly visible=${visibleW}/${dsW.length}`);
+      }
+      // avg used for both should land somewhere reasonable (20-80%).
+      const avgI = dsI.reduce((s, b) => s + (100 - b.p), 0) / dsI.length;
+      const avgW = dsW.reduce((s, b) => s + (100 - b.p), 0) / dsW.length;
+      if (avgI < 20 || avgI > 80) throw new Error("interval avg out of range: " + avgI);
+      if (avgW < 20 || avgW > 80) throw new Error("weekly avg out of range: " + avgW);
+    },
+  },
+  {
+    name: "seedFakeHistory: deterministic for same timestamp seed",
+    fn: () => {
+      const fixed = 1700000000000;
+      const a = seedFakeHistory(7, 90, fixed);
+      const b = seedFakeHistory(7, 90, fixed);
+      if (a.intervalSamples !== b.intervalSamples) throw new Error("length mismatch");
+      if (a.interval[0].p !== b.interval[0].p) throw new Error("first sample mismatch");
+      if (a.interval[a.intervalSamples - 1].p !== b.interval[a.intervalSamples - 1].p) {
+        throw new Error("last sample mismatch");
+      }
+    },
+  },
+  {
+    name: "seedFakeHistory: respects custom retention days",
+    fn: () => {
+      const res = seedFakeHistory(1, 7);
+      // 1 day interval ≈ 288 samples
+      if (res.intervalSamples < 286 || res.intervalSamples > 290) {
+        throw new Error("1d interval count off: " + res.intervalSamples);
+      }
+      // 7d weekly ≈ 2016 samples
+      if (res.weeklySamples < 2014 || res.weeklySamples > 2018) {
+        throw new Error("7d weekly count off: " + res.weeklySamples);
+      }
+    },
+  },
+  {
+    name: "backup/restore round-trip preserves blob shape",
+    fn: () => {
+      const ns = namespaceOf("sk-cp-test");
+      const mainBlob = JSON.stringify({
+        [ns]: {
+          interval: [{ ts: 1, p: 80 }, { ts: 2, p: 70 }],
+          weekly: [{ ts: 1, p: 90 }],
+        },
+      });
+      const slot = backupState(mainBlob);
+      if (!hasBackup(slot)) throw new Error("hasBackup false after backup");
+      const res = restoreBackup(slot);
+      if (!res.ok) throw new Error("restore failed: " + (res.error || ""));
+      if (res.blob !== mainBlob) throw new Error("blob not preserved exactly");
+    },
+  },
+  {
+    name: "backup: empty main returns ok:false",
+    fn: () => {
+      const slot = backupState("");
+      if (hasBackup(slot)) throw new Error("hasBackup true for empty");
+      const res = restoreBackup(slot);
+      if (res.ok) throw new Error("restore on empty should fail");
+    },
+  },
+  {
+    name: "restore: corrupt backup returns ok:false with error",
+    fn: () => {
+      const res = restoreBackup("{not json");
+      if (res.ok) throw new Error("corrupt restore should fail");
+      if (!res.error) throw new Error("error missing");
     },
   },
 ];

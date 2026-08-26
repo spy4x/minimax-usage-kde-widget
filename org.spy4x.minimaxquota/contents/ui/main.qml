@@ -196,6 +196,39 @@ PlasmoidItem {
         plasmoid.configuration.historyClearRequested = false
       }
     }
+    function onHistoryStoreBackupChanged() {
+      if (plasmoid.configuration.historyStoreBackup === true) {
+        const res = historyStore.backup()
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreBackup = false
+      }
+    }
+    function onHistoryStoreRestoreChanged() {
+      if (plasmoid.configuration.historyStoreRestore === true) {
+        const res = historyStore.restoreBackup()
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreRestore = false
+      }
+    }
+    function onHistoryStoreSeedChanged() {
+      if (plasmoid.configuration.historyStoreSeed === true) {
+        const res = historyStore.seedFakeHistory(
+          plasmoid.configuration.intervalRetentionDays || 7,
+          plasmoid.configuration.weeklyRetentionDays || 90
+        )
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreSeed = false
+      }
+    }
+  }
+
+  // Sync hasBackup → Plasmoid.configuration so the config dialog sees
+  // whether a snapshot exists when the user opens it.
+  Connections {
+    target: historyStore
+    function onHasBackupChanged() {
+      plasmoid.configuration.historyStoreHasBackup = historyStore.hasBackup
+    }
   }
 
   Component.onCompleted: {
@@ -204,6 +237,9 @@ PlasmoidItem {
     // apiKey was already populated synchronously on first load.
     historyStore.load()
     Qt.callLater(fetch)
+    // Push initial hasBackup state so the config dialog sees it on
+    // first open without waiting for a backup/restore to toggle.
+    plasmoid.configuration.historyStoreHasBackup = historyStore.hasBackup
   }
   Component.onDestruction: historyStore.flush(
     plasmoid.configuration.intervalRetentionDays || 7,

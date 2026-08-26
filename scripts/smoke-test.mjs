@@ -4,7 +4,7 @@
 //
 // Usage: node scripts/smoke-test.mjs
 //
-// Mirrors the JS in contents/ui/main.qml exactly so behavior matches.
+// Mirrors the JS in contents/ui/*.qml exactly so behavior matches.
 
 const sample = {
   base_resp: { status_code: 0, status_msg: "success" },
@@ -47,14 +47,10 @@ function parseResponse(doc) {
     intervalData: {
       remainingPercent: general.current_interval_remaining_percent,
       resetMs: general.remains_time,
-      totalCount: general.current_interval_total_count,
-      usedCount: general.current_interval_usage_count,
     },
     weeklyData: {
       remainingPercent: general.current_weekly_remaining_percent,
       resetMs: general.weekly_remains_time,
-      totalCount: general.current_weekly_total_count,
-      usedCount: general.current_weekly_usage_count,
     },
   };
 }
@@ -106,6 +102,79 @@ function downsample(points, maxBars) {
     out.push({ ts: n > 0 ? Math.floor(sumTs / n) : 0, p: minV, minP: minV, maxP: maxV });
   }
   return out;
+}
+
+// Mirror of HistoryChart.qml fmtAxisDate — short spans show time, long spans show date.
+// Node test uses Intl.DateTimeFormat (Qt.formatDateTime equivalent for our format strings).
+function fmtAxisDate(ts, spanMs) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (spanMs <= 172800000) {
+    // "MMM dd, HH:mm" — e.g. "Aug 19, 00:00"
+    const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mm = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${month} ${dd}, ${hh}:${mm}`;
+  }
+  // "MMM dd" — e.g. "Aug 19"
+  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${month} ${dd}`;
+}
+
+// Mirror of HistoryChart.qml barX — X position of a bar centered on its
+// timestamp. n is the sample count, mirroring the QML branch order:
+// dsPoints.length===1 → centered, then spanMs<=0 → 0, else timestamp ratio.
+function barX(ts, firstTs, spanMs, n, plotInnerWidth, barWidth) {
+  if (n === 1) return Math.max(0, (plotInnerWidth - barWidth) / 2);
+  if (spanMs <= 0) return 0;
+  const ratio = (ts - firstTs) / spanMs;
+  const center = ratio * plotInnerWidth;
+  return Math.max(0, Math.min(plotInnerWidth - barWidth, center - barWidth / 2));
+}
+
+// Mirror of HistoryChart.qml barWidth — capped narrow bar so dense data
+// still has 1px gutters between bars.
+function barWidth(n, plotInnerWidth) {
+  if (!n || n <= 0 || plotInnerWidth <= 0) return 0;
+  const slot = plotInnerWidth / n;
+  return Math.max(2, Math.min(8, slot - 1));
+}
+
+// Mirror of HistoryStore.qml namespace() — djb2 hash of apiKey, base36.
+function namespaceOf(apiKey) {
+  if (!apiKey || apiKey.length === 0) return "";
+  let h = 5381;
+  for (let i = 0; i < apiKey.length; i++) {
+    h = ((h << 5) + h + apiKey.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
+// Mirror of HistoryStore.qml load() — legacy single-namespace shape gets
+// migrated to the current namespace so users coming from the previous
+// version keep their data. When no namespace is configured yet (empty
+// key), leave the legacy fields in place — they'll migrate once a key
+// is configured and load() runs again.
+function migrateLegacyBlob(raw, ns) {
+  if (raw.length === 0) return { migrated: false, slice: null };
+  let obj;
+  try { obj = JSON.parse(raw); } catch (e) { return { migrated: false, slice: null }; }
+  if (Array.isArray(obj.interval) || Array.isArray(obj.weekly)) {
+    if (!ns) {
+      // No namespace yet — keep legacy fields, will migrate on next load().
+      return { migrated: false, slice: null, blob: obj };
+    }
+    obj[ns] = {
+      interval: Array.isArray(obj.interval) ? obj.interval : [],
+      weekly: Array.isArray(obj.weekly) ? obj.weekly : [],
+    };
+    delete obj.interval;
+    delete obj.weekly;
+    return { migrated: true, slice: obj[ns] || null, blob: obj };
+  }
+  return { migrated: false, slice: obj[ns] || null, blob: obj };
 }
 
 const tests = [
@@ -289,6 +358,148 @@ const tests = [
     fn: () => {
       const ds = downsample([], 10);
       if (ds.length !== 0) throw new Error("expected empty");
+    },
+  },
+  // ---- axis date formatting ----
+  {
+    name: "fmtAxisDate: short span includes time",
+    fn: () => {
+      // Aug 19, 00:00 UTC
+      const ts = Date.UTC(2026, 7, 19, 0, 0);
+      const out = fmtAxisDate(ts, 3600 * 1000);
+      if (out !== "Aug 19, 00:00") throw new Error("got " + out);
+    },
+  },
+  {
+    name: "fmtAxisDate: long span omits time",
+    fn: () => {
+      const ts = Date.UTC(2026, 7, 19, 0, 0);
+      const out = fmtAxisDate(ts, 7 * 86400 * 1000);
+      if (out !== "Aug 19") throw new Error("got " + out);
+    },
+  },
+  {
+    name: "fmtAxisDate: zero ts returns empty",
+    fn: () => {
+      if (fmtAxisDate(0, 0) !== "") throw new Error("got " + fmtAxisDate(0, 0));
+    },
+  },
+  // ---- bar positioning ----
+  {
+    name: "barWidth: sparse data caps at 8px wide",
+    fn: () => {
+      // 3 bars across 800px chart
+      const w = barWidth(3, 800);
+      if (w !== 8) throw new Error("got " + w);
+    },
+  },
+  {
+    name: "barWidth: dense data keeps 1px gap",
+    fn: () => {
+      // 200 bars across 800px → slot 4 → bar 3 (4-1=3)
+      const w = barWidth(200, 800);
+      if (w !== 3) throw new Error("got " + w);
+    },
+  },
+  {
+    name: "barWidth: never zero, never below 2",
+    fn: () => {
+      if (barWidth(1000, 800) < 2) throw new Error("got " + barWidth(1000, 800));
+      if (barWidth(0, 800) !== 0) throw new Error("got " + barWidth(0, 800));
+      // n=1 → slot=800, slot-1=799, min(8,799)=8 → bar width 8 (max cap).
+      if (barWidth(1, 800) !== 8) throw new Error("got " + barWidth(1, 800));
+    },
+  },
+  {
+    name: "barX: positions bars at their timestamp ratio",
+    fn: () => {
+      // 3 samples spread evenly over 19h, chart inner width 800px, bar 8px
+      const w = 800, bw = 8, n = 3, span = 19 * 3600 * 1000;
+      const t0 = 0, t1 = span / 2, t2 = span;
+      const x0 = barX(t0, t0, span, n, w, bw);
+      const x1 = barX(t1, t0, span, n, w, bw);
+      const x2 = barX(t2, t0, span, n, w, bw);
+      // First bar should be at the very left (clamped to 0)
+      if (x0 !== 0) throw new Error("first bar x=" + x0);
+      // Middle bar centered at chart center
+      if (Math.abs(x1 - (w / 2 - bw / 2)) > 1) throw new Error("middle bar x=" + x1);
+      // Last bar clamped to right edge
+      if (x2 !== w - bw) throw new Error("last bar x=" + x2);
+    },
+  },
+  {
+    name: "barX: single sample centers on chart",
+    fn: () => {
+      const x = barX(1234, 1234, 0, 1, 800, 8);
+      if (x !== (800 - 8) / 2) throw new Error("got " + x);
+    },
+  },
+  {
+    name: "barX: same-ts samples with n>1 return 0 (degenerate span)",
+    fn: () => {
+      const x = barX(1234, 1234, 0, 2, 800, 8);
+      if (x !== 0) throw new Error("got " + x);
+    },
+  },
+  // ---- history namespace ----
+  {
+    name: "namespace: empty apiKey → empty namespace",
+    fn: () => {
+      if (namespaceOf("") !== "") throw new Error("empty key");
+      if (namespaceOf(null) !== "") throw new Error("null key");
+      if (namespaceOf(undefined) !== "") throw new Error("undef key");
+    },
+  },
+  {
+    name: "namespace: deterministic and non-empty for real keys",
+    fn: () => {
+      const a = namespaceOf("sk-cp-test-abc");
+      const b = namespaceOf("sk-cp-test-abc");
+      if (a === "") throw new Error("hash empty");
+      if (a !== b) throw new Error("not deterministic");
+    },
+  },
+  {
+    name: "namespace: different keys → different namespaces",
+    fn: () => {
+      const a = namespaceOf("sk-cp-test-abc");
+      const b = namespaceOf("sk-cp-test-xyz");
+      if (a === b) throw new Error("collision");
+    },
+  },
+  {
+    name: "migrateLegacyBlob: legacy shape migrated to current namespace",
+    fn: () => {
+      const legacy = JSON.stringify({
+        interval: [{ ts: 1, p: 80 }],
+        weekly: [{ ts: 1, p: 70 }],
+      });
+      const ns = namespaceOf("sk-cp-test");
+      const out = migrateLegacyBlob(legacy, ns);
+      if (!out.migrated) throw new Error("not migrated");
+      if (!out.slice) throw new Error("slice missing");
+      if (out.slice.interval.length !== 1) throw new Error("interval not migrated");
+      if (out.blob.interval !== undefined) throw new Error("legacy fields not stripped");
+    },
+  },
+  {
+    name: "migrateLegacyBlob: no namespace → no migration",
+    fn: () => {
+      // When no key is set yet, don't assign legacy data anywhere; it'll
+      // migrate once a key is configured.
+      const legacy = JSON.stringify({ interval: [{ ts: 1, p: 80 }] });
+      const out = migrateLegacyBlob(legacy, "");
+      if (out.migrated) throw new Error("should not migrate without ns");
+    },
+  },
+  {
+    name: "migrateLegacyBlob: already namespaced → no migration",
+    fn: () => {
+      const ns = namespaceOf("sk-cp-test");
+      const blob = JSON.stringify({ [ns]: { interval: [{ ts: 1, p: 80 }] } });
+      const out = migrateLegacyBlob(blob, ns);
+      if (out.migrated) throw new Error("already migrated, but flagged as migrated");
+      if (!out.slice || out.slice.interval.length !== 1) throw new Error("slice missing");
     },
   },
 ];

@@ -17,8 +17,8 @@ PlasmoidItem {
   implicitHeight: 630
 
   // ---------- state ----------
-  property var intervalData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
-  property var weeklyData: ({ remainingPercent: null, resetMs: null, totalCount: 0, usedCount: 0 })
+  property var intervalData: ({ remainingPercent: null, resetMs: null })
+  property var weeklyData: ({ remainingPercent: null, resetMs: null })
   property string lastError: ""
   property bool loading: false
   // Wall-clock time (ms) when the last successful fetch landed.
@@ -31,7 +31,14 @@ PlasmoidItem {
   // View mode: 0 = current quota (rings), 1 = stats (history charts).
   property int viewMode: 0
 
-  HistoryStore { id: historyStore }
+  HistoryStore {
+    id: historyStore
+    // Bound to the configured subscription key. When the key changes
+    // (configured in the widget settings, or after widget removal/re-add)
+    // the store re-loads from the matching namespace, keeping history
+    // intact across widget instances.
+    apiKey: plasmoid.configuration.apiKey || ""
+  }
 
   // ---------- helpers ----------
   function cfgEndpoint() {
@@ -89,25 +96,20 @@ PlasmoidItem {
     }
     intervalData = {
       remainingPercent: general.current_interval_remaining_percent,
-      resetMs: general.remains_time,
-      totalCount: general.current_interval_total_count,
-      usedCount: general.current_interval_usage_count
+      resetMs: general.remains_time
     }
     weeklyData = {
       remainingPercent: general.current_weekly_remaining_percent,
-      resetMs: general.weekly_remains_time,
-      totalCount: general.current_weekly_total_count,
-      usedCount: general.current_weekly_usage_count
+      resetMs: general.weekly_remains_time
     }
     lastError = ""
     fetchedAt = Date.now()
     // Expose to plasmoid so the compact rep can read.
     plasmoid.intervalData = intervalData
     plasmoid.weeklyData = weeklyData
-    // Append to history unless explicitly disabled.
-    if (plasmoid.configuration.historyEnabled !== false) {
-      historyStore.append(intervalData.remainingPercent, weeklyData.remainingPercent)
-    }
+    // Append to history. The store itself decides whether to store based
+    // on whether an API key is configured.
+    historyStore.append(intervalData.remainingPercent, weeklyData.remainingPercent)
   }
 
   function fetch() {
@@ -197,6 +199,9 @@ PlasmoidItem {
   }
 
   Component.onCompleted: {
+    // HistoryStore.onNamespaceChanged already calls load() when the
+    // apiKey binding resolves, but call once explicitly in case the
+    // apiKey was already populated synchronously on first load.
     historyStore.load()
     Qt.callLater(fetch)
   }

@@ -6,6 +6,64 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-26
+
+### Added
+- **Stats view** as a second tab in the widget header. Two stacked bar
+  charts (5-hour window / last 7 days, weekly window / last 90 days)
+  with `now` / `avg` / `peak` usage numbers on the right and a
+  color-threshold legend below each chart.
+- **Hover tooltip on chart bars.** Move the mouse over the plot and a
+  small floating label appears showing the sample's timestamp and
+  usage %. The hovered bar also goes from 0.85 to 1.0 opacity. The
+  nearest bar is picked by timestamp — works the same whether the
+  chart is sparse or dense.
+- **History persistence** via `QtCore.Settings` (category `History`,
+  appended on every successful fetch, flushed every 30 s + on unload).
+- **History downsampling** for display (max 200 bars per chart,
+  preserves min/max envelope per bucket).
+- **History keyed per subscription.** Storage shape is
+  `{ "<hash>": { interval, weekly } }` where `<hash>` is a djb2 hash
+  of the configured API key. Two subscriptions never share data;
+  removing and re-adding the widget keeps the same history. Legacy
+  flat blobs are migrated to the current namespace on the next load.
+- Config fields: **5h retention (days)**, **Weekly retention (days)**,
+  **Clear history now** (clears only the current namespace).
+
+### Changed
+- **Bars are positioned by timestamp, not by index.** The chart
+  divides width by sample count would have made 3 samples over 19
+  hours look like 3 full-width bars covering the whole chart. Bars
+  are now narrow (capped at 8 px) and placed at their actual time
+  positions — gaps between bars show time gaps. Sparse data is
+  finally readable.
+- **Removed the red "now" vertical marker** over the latest sample —
+  it looked like a data spike, especially over short bars. The
+  right-edge X-axis label already shows the latest timestamp.
+- **Removed the `%` / `Tokens` pill toggle.** MiniMax only exposes
+  token counts for the *current* moment, so historical bars in
+  Tokens mode would have been scaled by today's total — visually
+  plausible but semantically misleading.
+- **History is always collected, no flag.** Removed the `Collect
+  history` config toggle and the `historyEnabled` config property.
+  While an API key is configured, every successful fetch is recorded.
+- X-axis labels include the time on short spans (≤48 h) and just the
+  date on longer ones.
+- Y-axis labels were inverted (`100` at the bottom, `0` at the top);
+  now `100` sits at the top, matching the gridlines and the bar
+  height direction.
+- `now` label in the stats header shows **usage %** (`85%` for 85
+  used) instead of **remaining %** — matches the bar's color.
+- Default poll interval raised from 60 s to **300 s (5 min)**.
+  Minimum allowed interval raised from 15 s to 60 s.
+
+### Fixed
+- `HistoryStore` was declared with `QtObject` as root, but `QtObject`
+  has no default property in QML, so the inner `Settings` child was
+  rejected with *"Cannot assign to non-existent default property"*.
+  Switched root to `Item` with `visible: false` and zero size to
+  keep it out of the visual tree.
+
 ## [1.3.1] — 2026-08-25
 
 ### Added

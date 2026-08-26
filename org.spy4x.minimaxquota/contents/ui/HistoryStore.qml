@@ -263,3 +263,4 @@ Item {
       weeklySamples: weekly.length,
     }
   }
+}

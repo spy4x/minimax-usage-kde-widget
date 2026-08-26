@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-08-26
+
+### Changed
+- **Header shows widget version** (e.g. `v1.5.2`) next to the Refresh
+  button instead of the live clock, so you can tell at a glance whether
+  Plasma is running the freshly-installed QML or a cached older copy.
+
 ## [1.5.1] — 2026-08-26
 
 ### Fixed

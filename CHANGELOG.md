@@ -6,6 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ## [1.5.5] — 2026-08-27
 
 ### Fixed
@@ -39,6 +40,24 @@ project adheres to [Semantic Versioning](https://semver.org/).
   missing.
 - **`scripts/check.sh`** — single pre-push gate: smoke test + QML
   lint. AGENTS.md updated.
+=======
+## [1.5.4] — 2026-08-27
+
+### Fixed
+- **HistoryStore.qml closing brace** — `seedFakeHistory` (added in 1.5.3)
+  was missing the outer Item scope's closing `}`, so Plasma refused to
+  load the widget. Caught by `qmllint` (see dev tooling below).
+
+### Added
+- **QML lint gate** (`scripts/lint-qml.sh` + `.qmllint.ini` at repo root)
+  runs `pyside6-qmllint` over every `contents/ui/*.qml`. Catches
+  syntax errors, undefined identifiers, type errors, and other static
+  issues that Plasma only surfaces at widget load. `qmllint` ships
+  with PySide6; install with `pip install --user pyside6` if missing.
+- **`scripts/check.sh`** runs smoke test + QML lint as a single
+  pre-push gate. AGENTS.md updated — both checks are required before
+  any commit.
+>>>>>>> 7ddc282 (chore(dev): qmllint gate + scripts/check.sh + AGENTS.md)
 
 ## [1.5.3] — 2026-08-27
 

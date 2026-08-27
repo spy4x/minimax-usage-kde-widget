@@ -21,6 +21,14 @@ KCMUtils.SimpleKCM {
 
   Kirigami.FormLayout {
     anchors.fill: parent
+    // Cap the form width. Without this, KCM.SimpleKCM auto-sizes the
+    // config dialog to fit the form's implicitWidth — which can balloon
+    // past the saved DialogWidth when a single long translated label
+    // (e.g. "Weekly retention (days):") forces a wider label column.
+    // User then sees labels clipped on the left with a horizontal
+    // scrollbar. Capping forces the dialog to respect its saved size
+    // (or anything narrower).
+    Layout.maximumWidth: 720
     wideMode: true
 
     QQC2.TextField {

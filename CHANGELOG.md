@@ -19,6 +19,13 @@ project adheres to [Semantic Versioning](https://semver.org/).
   formula as a ternary in the delegate and removed the property;
   replaced the helper with `barCenterX(index, n, plotInnerWidth)` so
   the tooltip also follows the index math.
+- **Settings dialog auto-sized past saved width** — without a width
+  cap, `KCM.SimpleKCM` widens the config dialog past `DialogWidth`
+  whenever the form's implicit width grows (e.g. translated labels
+  like "Weekly retention (days):" forcing a wider label column). The
+  dialog opened wider than the screen and the user had to scroll the
+  form to see the right edge. Cap `Kirigami.FormLayout.maximumWidth`
+  at 720px so the dialog respects its saved size.
 
 ## [1.5.5] — 2026-08-27
 

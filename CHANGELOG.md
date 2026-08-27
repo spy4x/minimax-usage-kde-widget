@@ -6,7 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-<<<<<<< HEAD
+## [1.5.6] — 2026-08-27
+
+### Fixed
+- **Stats charts: bars collapsed to width=0 on data refresh** —
+  `barWidth` was a `readonly property` with a function body. QML
+  evaluates Repeater delegate bindings lazily; when `dsPoints` changed
+  (e.g. after `seedFakeHistory`), the delegate's `width: chart.barWidth`
+  read the **stale** value (still 0 from initial render) and every
+  bar landed at width=0 on top of the index-based x. Same class of bug
+  as the previous `chart.barX(modelData.ts)` issue. Inlined the width
+  formula as a ternary in the delegate and removed the property;
+  replaced the helper with `barCenterX(index, n, plotInnerWidth)` so
+  the tooltip also follows the index math.
+
 ## [1.5.5] — 2026-08-27
 
 ### Fixed
@@ -29,8 +42,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - **HistoryStore.qml closing brace** — `seedFakeHistory` (1.5.3) was
-  missing the outer `Item` scope's closing `}`. Plasma refused to load
-  the widget. Caught by `qmllint` (see dev tooling below).
+  missing the outer `Item` scope's closing `}`, so Plasma refused to
+  load the widget. Caught by `qmllint` (see dev tooling below).
 
 ### Added
 - **QML lint gate** (`scripts/lint-qml.sh` + `.qmllint.ini`) — runs
@@ -40,13 +53,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
   missing.
 - **`scripts/check.sh`** — single pre-push gate: smoke test + QML
   lint. AGENTS.md updated.
-=======
-## [1.5.4] — 2026-08-27
-
-### Fixed
-- **HistoryStore.qml closing brace** — `seedFakeHistory` (added in 1.5.3)
-  was missing the outer Item scope's closing `}`, so Plasma refused to
-  load the widget. Caught by `qmllint` (see dev tooling below).
 
 ### Added
 - **QML lint gate** (`scripts/lint-qml.sh` + `.qmllint.ini` at repo root)

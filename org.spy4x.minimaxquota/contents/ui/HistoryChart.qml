@@ -60,21 +60,20 @@ Item {
   readonly property real plotInnerWidth: Math.max(0, plot.width - axisMargin)
   // Bar width: max(2, min(8, slot - 1)) — sparse data → narrow bars with
   // gaps, dense data → bars fill the slot with a 1px gutter.
-  readonly property real barWidth: {
-    if (!hasData || dsPoints.length === 0 || plotInnerWidth <= 0) return 0
-    const slot = plotInnerWidth / dsPoints.length
-    return Math.max(2, Math.min(8, slot - 1))
-  }
+  // Inlined in the bar delegate below as a ternary expression. Using a
+  // readonly-property with a function body here silently breaks because
+  // QML evaluates the delegate's `width: chart.barWidth` binding BEFORE
+  // this property re-evaluates after dsPoints changes — every bar ends
+  // up with width=0 on data refresh (e.g. seedFakeHistory).
 
-  // X position of a bar centered on its timestamp. Edge bars clamp to the
-  // chart bounds so they're always visible.
-  function barX(ts) {
-    if (!hasData) return 0
-    if (dsPoints.length === 1) return Math.max(0, (plotInnerWidth - barWidth) / 2)
-    if (spanMs <= 0) return 0
-    const ratio = (ts - firstTs) / spanMs
-    const center = ratio * plotInnerWidth
-    return Math.max(0, Math.min(plotInnerWidth - barWidth, center - barWidth / 2))
+  // X position of a bar by index (matches the bar delegate below).
+  // Returns the center x of the bar at `index` out of `n` total bars
+  // distributed evenly across `plotInnerWidth`. Edges clamp to chart
+  // bounds so the first/last bar never overflow.
+  function barCenterX(index, n) {
+    if (n <= 0 || plotInnerWidth <= 0) return 0
+    return Math.max(0, Math.min(plotInnerWidth,
+      (index / Math.max(1, n - 1)) * plotInnerWidth))
   }
 
   // ---------- helpers ----------
@@ -301,16 +300,17 @@ Item {
             readonly property bool isHovered: chart.hoveredIndex === index
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
-            // Position by index, not timestamp. The function-call form
-            // (`chart.barX(modelData.ts)`) reads chart.firstTs / spanMs at
-            // call time, and QML evaluates this binding BEFORE those
-            // properties have updated when dsPoints changes — every bar
-            // ended up at ratio=1 (rightmost edge). Using index gives
-            // uniform spacing for evenly sampled data (which is what the
-            // 5min widget fetch produces), so the chart looks correct
-            // without depending on chart state at binding evaluation time.
+            // Position + width both derived from dsPoints.length and
+            // plotInnerWidth, which QML can track through this ternary
+            // expression directly. Do NOT route through a separate
+            // readonly property with a function body — those evaluate
+            // lazily and the delegate reads the stale value, so every
+            // bar lands at x=0, width=0 on data refresh. Same class of
+            // bug as the earlier `chart.barX(modelData.ts)` issue.
             x: index * (chart.plotInnerWidth / Math.max(1, chart.dsPoints.length - 1))
-            width: chart.barWidth
+            width: (chart.plotInnerWidth > 0 && chart.dsPoints.length > 0)
+              ? Math.max(2, Math.min(8, chart.plotInnerWidth / chart.dsPoints.length - 1))
+              : 0
             height: (parent.height - 16) * Math.max(0, Math.min(100, used)) / 100
             color: chart.barColor(used)
             opacity: isHovered ? 1 : 0.85
@@ -331,8 +331,13 @@ Item {
           height: tipText.implicitHeight + 8
           x: {
             if (chart.hoveredIndex < 0 || !chart.hasData) return 0
-            const center = chart.barX(chart.dsPoints[chart.hoveredIndex].ts) + chart.barWidth / 2
-            return Math.max(4, Math.min(parent.width - width - 4, center - width / 2))
+            // Use the same index-based math as the bars (inlined to avoid
+            // the function-body readonly-property binding-order bug).
+            const barW = (chart.plotInnerWidth > 0 && chart.dsPoints.length > 0)
+              ? Math.max(2, Math.min(8, chart.plotInnerWidth / chart.dsPoints.length - 1))
+              : 0
+            const center = chart.barCenterX(chart.hoveredIndex, chart.dsPoints.length)
+            return Math.max(4, Math.min(parent.width - width - 4, center - barW / 2 - width / 2))
           }
           y: 4
           Label {

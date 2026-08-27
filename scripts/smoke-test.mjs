@@ -129,24 +129,26 @@ function fmtAxisDate(ts, spanMs) {
   return `${month} ${dd}`;
 }
 
-// Mirror of HistoryChart.qml barX — X position of a bar centered on its
-// timestamp. n is the sample count, mirroring the QML branch order:
-// dsPoints.length===1 → centered, then spanMs<=0 → 0, else timestamp ratio.
-function barX(ts, firstTs, spanMs, n, plotInnerWidth, barWidth) {
-  if (n === 1) return Math.max(0, (plotInnerWidth - barWidth) / 2);
-  if (spanMs <= 0) return 0;
-  const ratio = (ts - firstTs) / spanMs;
-  const center = ratio * plotInnerWidth;
-  return Math.max(0, Math.min(plotInnerWidth - barWidth, center - barWidth / 2));
+// Mirror of HistoryChart.qml barCenterX — X position of a bar by index,
+// distributed evenly across `plotInnerWidth`. Matches the bar delegate's
+// inline math: x = index * (plotInnerWidth / max(1, n - 1)).
+function barCenterX(index, n, plotInnerWidth) {
+  if (n <= 0 || plotInnerWidth <= 0) return 0;
+  return Math.max(0, Math.min(plotInnerWidth,
+    (index / Math.max(1, n - 1)) * plotInnerWidth));
 }
 
-// Mirror of HistoryChart.qml barWidth — capped narrow bar so dense data
-// still has 1px gutters between bars.
+// Mirror of the bar delegate's inline width formula. Returns 0 when the
+// chart isn't laid out yet (avoids the function-body readonly-property
+// binding-order bug that broke data refresh — every bar landed at width=0).
 function barWidth(n, plotInnerWidth) {
   if (!n || n <= 0 || plotInnerWidth <= 0) return 0;
   const slot = plotInnerWidth / n;
   return Math.max(2, Math.min(8, slot - 1));
 }
+
+// Mirror of HistoryChart.qml barWidth — capped narrow bar so dense data
+// still has 1px gutters between bars.
 
 // Mirror of HistoryStore.qml namespace() — djb2 hash of apiKey, base36.
 function namespaceOf(apiKey) {
@@ -490,33 +492,35 @@ const tests = [
     },
   },
   {
-    name: "barX: positions bars at their timestamp ratio",
+    name: "barCenterX: positions bars at their index ratio",
     fn: () => {
-      // 3 samples spread evenly over 19h, chart inner width 800px, bar 8px
-      const w = 800, bw = 8, n = 3, span = 19 * 3600 * 1000;
-      const t0 = 0, t1 = span / 2, t2 = span;
-      const x0 = barX(t0, t0, span, n, w, bw);
-      const x1 = barX(t1, t0, span, n, w, bw);
-      const x2 = barX(t2, t0, span, n, w, bw);
-      // First bar should be at the very left (clamped to 0)
+      // 3 bars distributed evenly over 800px chart inner width.
+      const w = 800, n = 3;
+      const x0 = barCenterX(0, n, w);
+      const x1 = barCenterX(1, n, w);
+      const x2 = barCenterX(2, n, w);
+      // First bar at the very left
       if (x0 !== 0) throw new Error("first bar x=" + x0);
-      // Middle bar centered at chart center
-      if (Math.abs(x1 - (w / 2 - bw / 2)) > 1) throw new Error("middle bar x=" + x1);
-      // Last bar clamped to right edge
-      if (x2 !== w - bw) throw new Error("last bar x=" + x2);
+      // Middle bar at chart center
+      if (Math.abs(x1 - w / 2) > 1) throw new Error("middle bar x=" + x1);
+      // Last bar at the very right
+      if (x2 !== w) throw new Error("last bar x=" + x2);
     },
   },
   {
-    name: "barX: single sample centers on chart",
+    name: "barCenterX: single sample puts bar at left edge",
     fn: () => {
-      const x = barX(1234, 1234, 0, 1, 800, 8);
-      if (x !== (800 - 8) / 2) throw new Error("got " + x);
+      // n=1 → stride denom max(1, 0) = 1 → ratio = 0 → x = 0.
+      // No "centered" branch anymore — the index-based formula always
+      // starts at the left edge.
+      const x = barCenterX(0, 1, 800);
+      if (x !== 0) throw new Error("got " + x);
     },
   },
   {
-    name: "barX: same-ts samples with n>1 return 0 (degenerate span)",
+    name: "barCenterX: n=0 returns 0 (degenerate)",
     fn: () => {
-      const x = barX(1234, 1234, 0, 2, 800, 8);
+      const x = barCenterX(0, 0, 800);
       if (x !== 0) throw new Error("got " + x);
     },
   },

@@ -28,7 +28,7 @@ PlasmoidItem {
   property int tickCount: 0
   // Widget version, mirrored from metadata.json KPlugin.Version. Update
   // both when bumping.
-  readonly property string widgetVersion: "1.5.2"
+  readonly property string widgetVersion: "1.5.6"
   // View mode: 0 = current quota (rings), 1 = stats (history charts).
   property int viewMode: 0
 

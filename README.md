@@ -96,11 +96,8 @@ historical view. Two stacked bar charts:
   monthly reset cycles so you can compare how aggressively you used
   quota across billing cycles.
 
-Bars are positioned by **timestamp**, not by index — gaps between bars
-show time gaps, so a brand-new install with only a handful of samples
-displays as a few narrow ticks at their actual times, not as wide bars
-stretched across the whole chart. Hover any bar to see its exact
-timestamp + value.
+Bars are positioned evenly after downsampling, keeping dense history readable
+without overlap. Hover any bar to see its bucket date and average usage.
 
 Each chart shows three numbers on the right: `now` (current usage,
 color-coded), `avg` (average used % over the window), and `peak`
@@ -207,9 +204,9 @@ node scripts/smoke-test.mjs
 
 This validates the response parsing, `formatDuration`, `usedFromRemaining`,
 history append/prune, downsample logic, and the chart helpers
-(`fmtAxisDate`, `barX`, `barWidth`) + history namespace helpers
+(`fmtAxisDate`, `barCenterX`, `barWidth`) + history namespace helpers
 (`namespaceOf`, `migrateLegacyBlob`) without needing Plasma installed.
-31/31 should pass.
+All checks should pass.
 
 ### Iterate on QML
 

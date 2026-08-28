@@ -129,22 +129,29 @@ function fmtAxisDate(ts, spanMs) {
   return `${month} ${dd}`;
 }
 
-// Mirror of HistoryChart.qml barCenterX — X position of a bar by index,
-// distributed evenly across `plotInnerWidth`. Matches the bar delegate's
-// inline math: x = index * (plotInnerWidth / max(1, n - 1)).
-function barCenterX(index, n, plotInnerWidth) {
+// Mirror of HistoryChart.qml barCenterX — center of a bar distributed inside
+// `plotInnerWidth`, accounting for its width so edge bars never overflow.
+function barCenterX(index, n, plotInnerWidth, width) {
   if (n <= 0 || plotInnerWidth <= 0) return 0;
-  return Math.max(0, Math.min(plotInnerWidth,
-    (index / Math.max(1, n - 1)) * plotInnerWidth));
+  if (n === 1) return plotInnerWidth / 2;
+  const left = index * ((plotInnerWidth - width) / (n - 1));
+  return left + width / 2;
 }
 
-// Mirror of the bar delegate's inline width formula. Returns 0 when the
-// chart isn't laid out yet (avoids the function-body readonly-property
-// binding-order bug that broke data refresh — every bar landed at width=0).
+// Mirror of the bar delegate's inline width formula. Width stays below its
+// slot, preventing overlap when 200 bars render in a narrow plot.
 function barWidth(n, plotInnerWidth) {
   if (!n || n <= 0 || plotInnerWidth <= 0) return 0;
-  const slot = plotInnerWidth / n;
-  return Math.max(2, Math.min(8, slot - 1));
+  return Math.min(8, plotInnerWidth / n * 0.75);
+}
+
+function barIndexAtX(mouseX, n, plotInnerWidth, width) {
+  if (n <= 0 || plotInnerWidth <= 0) return -1;
+  if (n === 1) return 0;
+  const usableWidth = Math.max(0, plotInnerWidth - width);
+  if (usableWidth === 0) return 0;
+  const ratio = Math.max(0, Math.min(1, (mouseX - width / 2) / usableWidth));
+  return Math.round(ratio * (n - 1));
 }
 
 // Mirror of HistoryChart.qml barWidth — capped narrow bar so dense data
@@ -475,53 +482,69 @@ const tests = [
     },
   },
   {
-    name: "barWidth: dense data keeps 1px gap",
+    name: "barWidth: dense data stays below its slot",
     fn: () => {
-      // 200 bars across 800px → slot 4 → bar 3 (4-1=3)
+      // 200 bars across 800px → slot 4 → bar 3 (75% of slot)
       const w = barWidth(200, 800);
       if (w !== 3) throw new Error("got " + w);
     },
   },
   {
-    name: "barWidth: never zero, never below 2",
+    name: "barWidth: dense narrow plots do not force overlap",
     fn: () => {
-      if (barWidth(1000, 800) < 2) throw new Error("got " + barWidth(1000, 800));
+      if (Math.abs(barWidth(1000, 800) - 0.6) > Number.EPSILON) {
+        throw new Error("got " + barWidth(1000, 800));
+      }
       if (barWidth(0, 800) !== 0) throw new Error("got " + barWidth(0, 800));
-      // n=1 → slot=800, slot-1=799, min(8,799)=8 → bar width 8 (max cap).
       if (barWidth(1, 800) !== 8) throw new Error("got " + barWidth(1, 800));
     },
   },
   {
-    name: "barCenterX: positions bars at their index ratio",
+    name: "bar geometry: 200 bars fit narrow plot without overlap or overflow",
     fn: () => {
-      // 3 bars distributed evenly over 800px chart inner width.
-      const w = 800, n = 3;
-      const x0 = barCenterX(0, n, w);
-      const x1 = barCenterX(1, n, w);
-      const x2 = barCenterX(2, n, w);
-      // First bar at the very left
-      if (x0 !== 0) throw new Error("first bar x=" + x0);
-      // Middle bar at chart center
-      if (Math.abs(x1 - w / 2) > 1) throw new Error("middle bar x=" + x1);
-      // Last bar at the very right
-      if (x2 !== w) throw new Error("last bar x=" + x2);
+      const plotWidth = 328, n = 200;
+      const width = barWidth(n, plotWidth);
+      let previousRight = 0;
+      for (let i = 0; i < n; i++) {
+        const left = barCenterX(i, n, plotWidth, width) - width / 2;
+        if (left < previousRight - Number.EPSILON) {
+          throw new Error(`overlap at ${i}; left=${left} previousRight=${previousRight}`);
+        }
+        previousRight = left + width;
+      }
+      if (previousRight > plotWidth + Number.EPSILON) {
+        throw new Error(`overflow; right=${previousRight} plotWidth=${plotWidth}`);
+      }
     },
   },
   {
-    name: "barCenterX: single sample puts bar at left edge",
+    name: "barCenterX: single sample centers bar",
     fn: () => {
-      // n=1 → stride denom max(1, 0) = 1 → ratio = 0 → x = 0.
-      // No "centered" branch anymore — the index-based formula always
-      // starts at the left edge.
-      const x = barCenterX(0, 1, 800);
-      if (x !== 0) throw new Error("got " + x);
+      const x = barCenterX(0, 1, 800, 8);
+      if (x !== 400) throw new Error("got " + x);
     },
   },
   {
     name: "barCenterX: n=0 returns 0 (degenerate)",
     fn: () => {
-      const x = barCenterX(0, 0, 800);
+      const x = barCenterX(0, 0, 800, 0);
       if (x !== 0) throw new Error("got " + x);
+    },
+  },
+  {
+    name: "bar hover follows visual index despite irregular timestamps",
+    fn: () => {
+      const points = [
+        { ts: 1 },
+        { ts: 2 },
+        { ts: 3 },
+        { ts: 1000000 },
+      ];
+      const plotWidth = 328;
+      const width = barWidth(points.length, plotWidth);
+      const mouseX = barCenterX(2, points.length, plotWidth, width);
+      const hovered = barIndexAtX(mouseX, points.length, plotWidth, width);
+      if (hovered !== 2) throw new Error("got " + hovered);
     },
   },
   // ---- history namespace ----

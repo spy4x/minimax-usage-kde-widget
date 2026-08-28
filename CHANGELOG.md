@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.7] — 2026-08-28
+
+### Fixed
+- Prevent dense charts from overlapping bars by sizing each bar below its
+  available slot and keeping first and last bars inside plot bounds.
+- Let `Kirigami.FormLayout` switch to its responsive single-column mode and
+  give the settings KCM a bounded natural width. The previous attached
+  `Layout.maximumWidth` had no effect because the form was anchor-sized.
+
 ## [1.5.6] — 2026-08-27
 
 ### Fixed
@@ -60,17 +69,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
   missing.
 - **`scripts/check.sh`** — single pre-push gate: smoke test + QML
   lint. AGENTS.md updated.
-
-### Added
-- **QML lint gate** (`scripts/lint-qml.sh` + `.qmllint.ini` at repo root)
-  runs `pyside6-qmllint` over every `contents/ui/*.qml`. Catches
-  syntax errors, undefined identifiers, type errors, and other static
-  issues that Plasma only surfaces at widget load. `qmllint` ships
-  with PySide6; install with `pip install --user pyside6` if missing.
-- **`scripts/check.sh`** runs smoke test + QML lint as a single
-  pre-push gate. AGENTS.md updated — both checks are required before
-  any commit.
->>>>>>> 7ddc282 (chore(dev): qmllint gate + scripts/check.sh + AGENTS.md)
 
 ## [1.5.3] — 2026-08-27
 

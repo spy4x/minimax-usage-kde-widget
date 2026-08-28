@@ -8,6 +8,9 @@ import org.kde.plasma.plasmoid
 KCMUtils.SimpleKCM {
   id: configGeneral
 
+  // Give the host dialog a bounded natural width. Actual width remains host-controlled.
+  implicitWidth: Kirigami.Units.gridUnit * 40
+
   // Direct bindings to Plasmoid.configuration.<name>
   property string cfg_apiKey: Plasmoid.configuration.apiKey
   property string cfg_endpoint: Plasmoid.configuration.endpoint
@@ -20,16 +23,8 @@ KCMUtils.SimpleKCM {
   property bool cfg_historyClearRequested: Plasmoid.configuration.historyClearRequested === true
 
   Kirigami.FormLayout {
+    id: configForm
     anchors.fill: parent
-    // Cap the form width. Without this, KCM.SimpleKCM auto-sizes the
-    // config dialog to fit the form's implicitWidth — which can balloon
-    // past the saved DialogWidth when a single long translated label
-    // (e.g. "Weekly retention (days):") forces a wider label column.
-    // User then sees labels clipped on the left with a horizontal
-    // scrollbar. Capping forces the dialog to respect its saved size
-    // (or anything narrower).
-    Layout.maximumWidth: 720
-    wideMode: true
 
     QQC2.TextField {
       id: apiKeyField

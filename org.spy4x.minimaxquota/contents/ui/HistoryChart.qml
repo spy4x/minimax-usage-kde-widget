@@ -10,9 +10,8 @@ import QtQuick.Controls
 //   title     — header text
 //   maxBars   — display cap (default 200)
 //
-// Bars are positioned BY TIMESTAMP, not by index, so sparse data shows
-// gaps where the time gaps are. Bar width is capped at 8px so dense
-// data still leaves a 1px gap between bars. A hover tooltip surfaces
+// Bars are positioned by index after downsampling. Bar width is capped at
+// 75% of its slot and 8px so dense data keeps visible gaps. A hover tooltip surfaces
 // the timestamp + value of the nearest bar.
 Item {
   id: chart
@@ -58,23 +57,22 @@ Item {
   // ---------- layout constants ----------
   readonly property int axisMargin: 44   // right margin for Y-axis labels
   readonly property real plotInnerWidth: Math.max(0, plot.width - axisMargin)
-  // Bar width: max(2, min(8, slot - 1)) — sparse data → narrow bars with
-  // gaps, dense data → bars fill the slot with a 1px gutter.
-  readonly property real barWidth: {
-    if (!hasData || dsPoints.length === 0 || plotInnerWidth <= 0) return 0
-    const slot = plotInnerWidth / dsPoints.length
-    return Math.max(2, Math.min(8, slot - 1))
+  // Center position for tooltip geometry. Width is part of the calculation
+  // so first and last bars remain fully inside the plot.
+  function barCenterX(index, n, width) {
+    if (n <= 0 || plotInnerWidth <= 0) return 0
+    if (n === 1) return plotInnerWidth / 2
+    const left = index * ((plotInnerWidth - width) / (n - 1))
+    return left + width / 2
   }
 
-  // X position of a bar centered on its timestamp. Edge bars clamp to the
-  // chart bounds so they're always visible.
-  function barX(ts) {
-    if (!hasData) return 0
-    if (dsPoints.length === 1) return Math.max(0, (plotInnerWidth - barWidth) / 2)
-    if (spanMs <= 0) return 0
-    const ratio = (ts - firstTs) / spanMs
-    const center = ratio * plotInnerWidth
-    return Math.max(0, Math.min(plotInnerWidth - barWidth, center - barWidth / 2))
+  function barIndexAtX(mouseX, n, width) {
+    if (n <= 0 || plotInnerWidth <= 0) return -1
+    if (n === 1) return 0
+    const usableWidth = Math.max(0, plotInnerWidth - width)
+    if (usableWidth === 0) return 0
+    const ratio = Math.max(0, Math.min(1, (mouseX - width / 2) / usableWidth))
+    return Math.round(ratio * (n - 1))
   }
 
   // ---------- helpers ----------
@@ -87,16 +85,17 @@ Item {
       const start = Math.floor(i * bucket)
       const end = Math.min(points.length, Math.floor((i + 1) * bucket))
       if (start >= end) continue
-      let minV = 100, maxV = 0, sumTs = 0, n = 0
+      let minV = 100, maxV = 0, sumP = 0, sumTs = 0, n = 0
       for (let j = start; j < end; j++) {
         if (points[j].p < minV) minV = points[j].p
         if (points[j].p > maxV) maxV = points[j].p
+        sumP += points[j].p
         sumTs += points[j].ts
         n++
       }
       out.push({
         ts: n > 0 ? Math.floor(sumTs / n) : 0,
-        p: minV,
+        p: n > 0 ? Math.floor(sumP / n) : 0,
         minP: minV,
         maxP: maxV
       })
@@ -231,8 +230,7 @@ Item {
         anchors.fill: parent
         visible: chart.hasData
 
-        // Hover handler — finds the nearest bar by timestamp and writes
-        // its index to chart.hoveredIndex. Tooltip + bar highlight read it.
+        // Hover handler selects by the same index geometry used to draw bars.
         MouseArea {
           id: hoverArea
           anchors.fill: parent
@@ -243,19 +241,9 @@ Item {
               chart.hoveredIndex = -1
               return
             }
-            if (chart.dsPoints.length === 1) {
-              chart.hoveredIndex = 0
-              return
-            }
-            const ratio = Math.max(0, Math.min(1, mouseX / chart.plotInnerWidth))
-            const targetTs = chart.firstTs + ratio * chart.spanMs
-            let bestI = 0
-            let bestD = Math.abs(chart.dsPoints[0].ts - targetTs)
-            for (let i = 1; i < chart.dsPoints.length; i++) {
-              const d = Math.abs(chart.dsPoints[i].ts - targetTs)
-              if (d < bestD) { bestD = d; bestI = i }
-            }
-            chart.hoveredIndex = bestI
+            const barW = Math.min(8,
+              chart.plotInnerWidth / chart.dsPoints.length * 0.75)
+            chart.hoveredIndex = chart.barIndexAtX(mouseX, chart.dsPoints.length, barW)
           }
           onExited: chart.hoveredIndex = -1
         }
@@ -300,8 +288,15 @@ Item {
             readonly property bool isHovered: chart.hoveredIndex === index
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
-            x: chart.barX(modelData.ts)
-            width: chart.barWidth
+            // Keep width below slot size. A 2px minimum made all 200 bars
+            // overlap whenever plot width was below 400px.
+            width: (chart.plotInnerWidth > 0 && chart.dsPoints.length > 0)
+              ? Math.min(8, chart.plotInnerWidth / chart.dsPoints.length * 0.75)
+              : 0
+            x: chart.dsPoints.length === 1
+              ? (chart.plotInnerWidth - width) / 2
+              : index * ((chart.plotInnerWidth - width)
+                / Math.max(1, chart.dsPoints.length - 1))
             height: (parent.height - 16) * Math.max(0, Math.min(100, used)) / 100
             color: chart.barColor(used)
             opacity: isHovered ? 1 : 0.85
@@ -322,7 +317,10 @@ Item {
           height: tipText.implicitHeight + 8
           x: {
             if (chart.hoveredIndex < 0 || !chart.hasData) return 0
-            const center = chart.barX(chart.dsPoints[chart.hoveredIndex].ts) + chart.barWidth / 2
+            const barW = (chart.plotInnerWidth > 0 && chart.dsPoints.length > 0)
+              ? Math.min(8, chart.plotInnerWidth / chart.dsPoints.length * 0.75)
+              : 0
+            const center = chart.barCenterX(chart.hoveredIndex, chart.dsPoints.length, barW)
             return Math.max(4, Math.min(parent.width - width - 4, center - width / 2))
           }
           y: 4

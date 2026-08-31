@@ -26,8 +26,9 @@ PlasmoidItem {
   // Tick counter — bound by a 1-second timer so any UI reading liveResetMs
   // re-evaluates and the countdowns decrement without a network call.
   property int tickCount: 0
-  // Header clock string, refreshed every second.
-  property string clockText: Qt.formatDateTime(new Date(), "HH:mm:ss")
+  // Widget version, mirrored from metadata.json KPlugin.Version. Update
+  // both when bumping.
+  readonly property string widgetVersion: "1.5.7"
   // View mode: 0 = current quota (rings), 1 = stats (history charts).
   property int viewMode: 0
 
@@ -159,7 +160,6 @@ PlasmoidItem {
     triggeredOnStart: true
     onTriggered: {
       root.tickCount++
-      root.clockText = Qt.formatDateTime(new Date(), "HH:mm:ss")
     }
   }
   // History flush: writes pending samples to disk every 30s and at unload.
@@ -196,6 +196,39 @@ PlasmoidItem {
         plasmoid.configuration.historyClearRequested = false
       }
     }
+    function onHistoryStoreBackupChanged() {
+      if (plasmoid.configuration.historyStoreBackup === true) {
+        const res = historyStore.backup()
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreBackup = false
+      }
+    }
+    function onHistoryStoreRestoreChanged() {
+      if (plasmoid.configuration.historyStoreRestore === true) {
+        const res = historyStore.restoreBackup()
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreRestore = false
+      }
+    }
+    function onHistoryStoreSeedChanged() {
+      if (plasmoid.configuration.historyStoreSeed === true) {
+        const res = historyStore.seedFakeHistory(
+          plasmoid.configuration.intervalRetentionDays || 7,
+          plasmoid.configuration.weeklyRetentionDays || 90
+        )
+        plasmoid.configuration.historyStoreLastResult = JSON.stringify(res || {})
+        plasmoid.configuration.historyStoreSeed = false
+      }
+    }
+  }
+
+  // Sync hasBackup → Plasmoid.configuration so the config dialog sees
+  // whether a snapshot exists when the user opens it.
+  Connections {
+    target: historyStore
+    function onHasBackupChanged() {
+      plasmoid.configuration.historyStoreHasBackup = historyStore.hasBackup
+    }
   }
 
   Component.onCompleted: {
@@ -204,6 +237,9 @@ PlasmoidItem {
     // apiKey was already populated synchronously on first load.
     historyStore.load()
     Qt.callLater(fetch)
+    // Push initial hasBackup state so the config dialog sees it on
+    // first open without waiting for a backup/restore to toggle.
+    plasmoid.configuration.historyStoreHasBackup = historyStore.hasBackup
   }
   Component.onDestruction: historyStore.flush(
     plasmoid.configuration.intervalRetentionDays || 7,
@@ -294,10 +330,20 @@ PlasmoidItem {
         }
       }
       Label {
-        text: root.clockText
+        text: "v" + root.widgetVersion
         color: "#8a93a8"
         font.pixelSize: 13
         font.family: "monospace"
+        // Tooltip so the user can confirm which version is actually running
+        // if Plasma is caching an older QML.
+        ToolTip.text: "MiniMax Quota v" + root.widgetVersion
+        ToolTip.visible: hovered
+        ToolTip.delay: 500
+        MouseArea {
+          anchors.fill: parent
+          hoverEnabled: true
+          acceptedButtons: Qt.NoButton
+        }
       }
       Button {
         text: "↻ Refresh"

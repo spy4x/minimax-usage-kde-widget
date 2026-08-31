@@ -8,6 +8,9 @@ import org.kde.plasma.plasmoid
 KCMUtils.SimpleKCM {
   id: configGeneral
 
+  // Give the host dialog a bounded natural width. Actual width remains host-controlled.
+  implicitWidth: Kirigami.Units.gridUnit * 40
+
   // Direct bindings to Plasmoid.configuration.<name>
   property string cfg_apiKey: Plasmoid.configuration.apiKey
   property string cfg_endpoint: Plasmoid.configuration.endpoint
@@ -20,8 +23,8 @@ KCMUtils.SimpleKCM {
   property bool cfg_historyClearRequested: Plasmoid.configuration.historyClearRequested === true
 
   Kirigami.FormLayout {
+    id: configForm
     anchors.fill: parent
-    wideMode: true
 
     QQC2.TextField {
       id: apiKeyField
@@ -128,6 +131,143 @@ KCMUtils.SimpleKCM {
         Plasmoid.configuration.historyClearRequested = true
         clearConfirmDialog.close()
       }
+    }
+
+    // ---- Backup / Restore / Seed (developer tools) ----
+
+    Item {
+      Kirigami.FormData.isSection: true
+      Kirigami.FormData.label: i18n("Backup & dev tools")
+    }
+
+    QQC2.Label {
+      Layout.fillWidth: true
+      Layout.bottomMargin: Kirigami.Units.smallSpacing
+      wrapMode: Text.Wrap
+      font.pixelSize: 10
+      opacity: 0.7
+      text: i18n("These buttons let you snapshot the current history, " +
+                 "restore a previous snapshot, or fill history with realistic " +
+                 "fake samples so the stats charts have visible bars to render. " +
+                 "All three are gated by a confirmation dialog.")
+    }
+
+    QQC2.Button {
+      text: i18n("Backup current history")
+      Layout.fillWidth: true
+      enabled: Plasmoid.configuration.apiKey.length > 0
+      onClicked: backupResultDialog.showWith("backup")
+    }
+    QQC2.Button {
+      text: i18n("Restore from backup")
+      Layout.fillWidth: true
+      enabled: Plasmoid.configuration.historyStoreHasBackup === true
+      onClicked: restoreConfirmDialog.open()
+    }
+    QQC2.Button {
+      text: i18n("Fill with fake samples")
+      Layout.fillWidth: true
+      enabled: Plasmoid.configuration.apiKey.length > 0
+      onClicked: seedConfirmDialog.open()
+    }
+
+    // Restore needs a separate confirmation — overwriting the live data
+    // without a snapshot would lose real history if no backup exists.
+    Kirigami.Dialog {
+      id: restoreConfirmDialog
+      title: i18n("Restore history from backup?")
+      QQC2.Label {
+        text: i18n("Replaces the current history for this subscription " +
+                   "with the previously-saved snapshot, then clears the " +
+                   "backup so it can't be re-applied by mistake.")
+        wrapMode: Text.Wrap
+      }
+      standardButtons: Kirigami.Dialog.No | Kirigami.Dialog.Yes
+      onAccepted: {
+        backupResultDialog.showWith("restore")
+        restoreConfirmDialog.close()
+      }
+    }
+
+    Kirigami.Dialog {
+      id: seedConfirmDialog
+      title: i18n("Fill history with fake samples?")
+      QQC2.Label {
+        text: i18n("Generates ~2k samples over 7 days (5h window) and ~26k " +
+                   "samples over 90 days (weekly) as a sawtooth pattern, then " +
+                   "overwrites the current history for this subscription. " +
+                   "The fake data is deterministic — same window produces " +
+                   "same endRemaining on every run. Use the Backup button " +
+                   "first if you have real history you want to keep.")
+        wrapMode: Text.Wrap
+      }
+      standardButtons: Kirigami.Dialog.No | Kirigami.Dialog.Yes
+      onAccepted: {
+        backupResultDialog.showWith("seed")
+        seedConfirmDialog.close()
+      }
+    }
+
+    // Single result dialog driven by `kind` so we can reuse it for all
+    // three actions without three near-identical dialogs. The actual
+    // call happens in main.qml when the corresponding Plasmoid flag flips
+    // true→false; we just observe the flip and read the JSON result.
+    Kirigami.Dialog {
+      id: backupResultDialog
+      title: i18n("Result")
+      property string message: ""
+
+      function showWith(k) {
+        // Trigger the action by flipping the flag — main.qml will run
+        // the matching function and write historyStoreLastResult.
+        if (k === "backup") Plasmoid.configuration.historyStoreBackup = true
+        else if (k === "restore") Plasmoid.configuration.historyStoreRestore = true
+        else if (k === "seed") Plasmoid.configuration.historyStoreSeed = true
+      }
+
+      Connections {
+        target: Plasmoid.configuration
+        // True→False on historyStoreBackup / historyStoreRestore /
+        // historyStoreSeed means main.qml finished the action. Read
+        // historyStoreLastResult for the JSON payload.
+        function onHistoryStoreBackupChanged() {
+          if (Plasmoid.configuration.historyStoreBackup === false) {
+            backupResultDialog.displayResult("backup")
+          }
+        }
+        function onHistoryStoreRestoreChanged() {
+          if (Plasmoid.configuration.historyStoreRestore === false) {
+            backupResultDialog.displayResult("restore")
+          }
+        }
+        function onHistoryStoreSeedChanged() {
+          if (Plasmoid.configuration.historyStoreSeed === false) {
+            backupResultDialog.displayResult("seed")
+          }
+        }
+      }
+
+      function displayResult(k) {
+        const raw = Plasmoid.configuration.historyStoreLastResult || "{}"
+        let res = {}
+        try { res = JSON.parse(raw) } catch (e) { res = { ok: false, error: String(e) } }
+        const ok = !!(res && res.ok)
+        if (ok) {
+          if (k === "backup") message = i18n("Backed up %1 sample(s) to the snapshot slot.").arg(res.samples || 0)
+          else if (k === "restore") message = i18n("Restored %1 sample(s) from the snapshot.").arg(res.samples || 0)
+          else message = i18n("Generated %1 interval + %2 weekly fake samples.")
+                          .arg(res.intervalSamples || 0).arg(res.weeklySamples || 0)
+        } else {
+          message = (res && res.error) ? res.error : i18n("Unknown error.")
+        }
+        open()
+      }
+
+      QQC2.Label {
+        text: backupResultDialog.message
+        wrapMode: Text.Wrap
+      }
+      standardButtons: Kirigami.Dialog.Ok
     }
 
     Item {

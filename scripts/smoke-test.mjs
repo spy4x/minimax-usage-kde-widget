@@ -92,14 +92,20 @@ function downsample(points, maxBars) {
     const start = Math.floor(i * bucket);
     const end = Math.min(points.length, Math.floor((i + 1) * bucket));
     if (start >= end) continue;
-    let minV = 100, maxV = 0, sumTs = 0, n = 0;
+    let minV = 100, maxV = 0, sumP = 0, sumTs = 0, n = 0;
     for (let j = start; j < end; j++) {
       if (points[j].p < minV) minV = points[j].p;
       if (points[j].p > maxV) maxV = points[j].p;
+      sumP += points[j].p;
       sumTs += points[j].ts;
       n++;
     }
-    out.push({ ts: n > 0 ? Math.floor(sumTs / n) : 0, p: minV, minP: minV, maxP: maxV });
+    out.push({
+      ts: n > 0 ? Math.floor(sumTs / n) : 0,
+      p: n > 0 ? Math.floor(sumP / n) : 0,
+      minP: minV,
+      maxP: maxV,
+    });
   }
   return out;
 }
@@ -123,24 +129,33 @@ function fmtAxisDate(ts, spanMs) {
   return `${month} ${dd}`;
 }
 
-// Mirror of HistoryChart.qml barX — X position of a bar centered on its
-// timestamp. n is the sample count, mirroring the QML branch order:
-// dsPoints.length===1 → centered, then spanMs<=0 → 0, else timestamp ratio.
-function barX(ts, firstTs, spanMs, n, plotInnerWidth, barWidth) {
-  if (n === 1) return Math.max(0, (plotInnerWidth - barWidth) / 2);
-  if (spanMs <= 0) return 0;
-  const ratio = (ts - firstTs) / spanMs;
-  const center = ratio * plotInnerWidth;
-  return Math.max(0, Math.min(plotInnerWidth - barWidth, center - barWidth / 2));
+// Mirror of HistoryChart.qml barCenterX — center of a bar distributed inside
+// `plotInnerWidth`, accounting for its width so edge bars never overflow.
+function barCenterX(index, n, plotInnerWidth, width) {
+  if (n <= 0 || plotInnerWidth <= 0) return 0;
+  if (n === 1) return plotInnerWidth / 2;
+  const left = index * ((plotInnerWidth - width) / (n - 1));
+  return left + width / 2;
+}
+
+// Mirror of the bar delegate's inline width formula. Width stays below its
+// slot, preventing overlap when 200 bars render in a narrow plot.
+function barWidth(n, plotInnerWidth) {
+  if (!n || n <= 0 || plotInnerWidth <= 0) return 0;
+  return Math.min(8, plotInnerWidth / n * 0.75);
+}
+
+function barIndexAtX(mouseX, n, plotInnerWidth, width) {
+  if (n <= 0 || plotInnerWidth <= 0) return -1;
+  if (n === 1) return 0;
+  const usableWidth = Math.max(0, plotInnerWidth - width);
+  if (usableWidth === 0) return 0;
+  const ratio = Math.max(0, Math.min(1, (mouseX - width / 2) / usableWidth));
+  return Math.round(ratio * (n - 1));
 }
 
 // Mirror of HistoryChart.qml barWidth — capped narrow bar so dense data
 // still has 1px gutters between bars.
-function barWidth(n, plotInnerWidth) {
-  if (!n || n <= 0 || plotInnerWidth <= 0) return 0;
-  const slot = plotInnerWidth / n;
-  return Math.max(2, Math.min(8, slot - 1));
-}
 
 // Mirror of HistoryStore.qml namespace() — djb2 hash of apiKey, base36.
 function namespaceOf(apiKey) {
@@ -150,6 +165,77 @@ function namespaceOf(apiKey) {
     h = ((h << 5) + h + apiKey.charCodeAt(i)) | 0;
   }
   return Math.abs(h).toString(36);
+}
+
+// Mirror of HistoryStore.qml seedFakeHistory(). Deterministic sawtooth
+// per (interval, weekly) window. Returns the same shape as the QML impl:
+// { ok, intervalSamples, weeklySamples }.
+function seedFakeHistory(intervalDays, weeklyDays, now = Date.now()) {
+  const sampleMs = 5 * 60 * 1000;
+  const fiveHours = 5 * 60 * 60 * 1000;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+  const interval = [];
+  const intStart = now - Math.max(1, intervalDays || 7) * 86400000;
+  for (let t = intStart; t <= now; t += sampleMs) {
+    const wIdx = Math.floor(t / fiveHours);
+    const wStart = wIdx * fiveHours;
+    const pos = (t - wStart) / fiveHours;
+    const endR = 20 + ((wIdx * 7919) % 60);
+    const base = 100 - pos * (100 - endR);
+    const noise = (((wIdx * 31) ^ Math.floor(t / sampleMs)) % 7) - 3;
+    const r = Math.max(0, Math.min(100, Math.round(base + noise)));
+    interval.push({ ts: t, p: r });
+  }
+
+  const weekly = [];
+  const wkStart = now - Math.max(1, weeklyDays || 90) * 86400000;
+  for (let t = wkStart; t <= now; t += sampleMs) {
+    const wIdx = Math.floor(t / sevenDays);
+    const wStart = wIdx * sevenDays;
+    const pos = (t - wStart) / sevenDays;
+    const endR = 30 + ((wIdx * 6151) % 50);
+    const base = 100 - pos * (100 - endR);
+    const noise = (((wIdx * 47) ^ Math.floor(t / sampleMs)) % 7) - 3;
+    const r = Math.max(0, Math.min(100, Math.round(base + noise)));
+    weekly.push({ ts: t, p: r });
+  }
+
+  return {
+    ok: true,
+    intervalSamples: interval.length,
+    weeklySamples: weekly.length,
+    interval,
+    weekly,
+  };
+}
+
+// Mirror of HistoryStore.qml backup/restore semantics. We don't have real
+// Settings here, so we model the backup slot as a plain string.
+function backupState(mainData) {
+  return mainData || "";
+}
+function hasBackup(backupSlot) {
+  return typeof backupSlot === "string" && backupSlot.length > 0;
+}
+function restoreBackup(backupSlot) {
+  if (!hasBackup(backupSlot)) return { ok: false, error: "No backup to restore." };
+  try {
+    const parsed = JSON.parse(backupSlot);
+    if (!parsed || typeof parsed !== "object") return { ok: false, error: "Backup is corrupted." };
+    return { ok: true, blob: backupSlot, samples: countSamples(parsed) };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+function countSamples(obj) {
+  let n = 0;
+  for (const k in obj) {
+    const s = obj[k];
+    if (s && Array.isArray(s.interval)) n += s.interval.length;
+    if (s && Array.isArray(s.weekly)) n += s.weekly.length;
+  }
+  return n;
 }
 
 // Mirror of HistoryStore.qml load() — legacy single-namespace shape gets
@@ -322,23 +408,24 @@ const tests = [
     },
   },
   {
-    name: "history downsample collapses to maxBars buckets with min",
+    name: "history downsample collapses to maxBars buckets with avg p",
     fn: () => {
-      // 1000 points → 5 buckets of 200
+      // 1000 points → 5 buckets of 200. Values cycle i % 100, so each bucket
+      // contains two full cycles (0..99, 0..99). Average per bucket =
+      // (sum of 0..99 twice) / 200 = 9900/200 = 49.5 → floor 49.
       const arr = [];
       for (let i = 0; i < 1000; i++) arr.push({ ts: i * 1000, p: i % 100 });
       const ds = downsample(arr, 5);
       if (ds.length !== 5) throw new Error("expected 5 buckets, got " + ds.length);
-      // Each bucket holds the min of its slice. Values cycle i % 100, so
-      // every bucket's min is 0.
-      if (ds[0].p !== 0) throw new Error("bucket 0 min");
-      if (ds[0].maxP !== 99) throw new Error("bucket 0 max (expected 99 from i=99)");
-      if (ds[4].p !== 0) throw new Error("bucket 4 min (expected 0)");
-      if (ds[4].maxP !== 99) throw new Error("bucket 4 max");
+      if (ds[0].p !== 49) throw new Error("bucket 0 avg p (expected 49, got " + ds[0].p + ")");
+      if (ds[0].minP !== 0) throw new Error("bucket 0 minP");
+      if (ds[0].maxP !== 99) throw new Error("bucket 0 maxP (expected 99 from i=99)");
+      if (ds[4].p !== 49) throw new Error("bucket 4 avg p (expected 49)");
+      if (ds[4].maxP !== 99) throw new Error("bucket 4 maxP");
     },
   },
   {
-    name: "history downsample records min/max envelope per bucket",
+    name: "history downsample records avg/min/max envelope per bucket",
     fn: () => {
       const arr = [
         { ts: 0, p: 80 },
@@ -346,9 +433,10 @@ const tests = [
         { ts: 2, p: 95 },   // max in bucket
         { ts: 3, p: 50 },
       ];
+      // avg p = (80 + 30 + 95 + 50) / 4 = 255/4 = 63.75 → floor 63
       const ds = downsample(arr, 1);
       if (ds.length !== 1) throw new Error("expected 1 bucket");
-      if (ds[0].p !== 30) throw new Error("min not used as bar value");
+      if (ds[0].p !== 63) throw new Error("avg p not used as bar value (got " + ds[0].p + ")");
       if (ds[0].minP !== 30) throw new Error("minP");
       if (ds[0].maxP !== 95) throw new Error("maxP");
     },
@@ -394,51 +482,69 @@ const tests = [
     },
   },
   {
-    name: "barWidth: dense data keeps 1px gap",
+    name: "barWidth: dense data stays below its slot",
     fn: () => {
-      // 200 bars across 800px → slot 4 → bar 3 (4-1=3)
+      // 200 bars across 800px → slot 4 → bar 3 (75% of slot)
       const w = barWidth(200, 800);
       if (w !== 3) throw new Error("got " + w);
     },
   },
   {
-    name: "barWidth: never zero, never below 2",
+    name: "barWidth: dense narrow plots do not force overlap",
     fn: () => {
-      if (barWidth(1000, 800) < 2) throw new Error("got " + barWidth(1000, 800));
+      if (Math.abs(barWidth(1000, 800) - 0.6) > Number.EPSILON) {
+        throw new Error("got " + barWidth(1000, 800));
+      }
       if (barWidth(0, 800) !== 0) throw new Error("got " + barWidth(0, 800));
-      // n=1 → slot=800, slot-1=799, min(8,799)=8 → bar width 8 (max cap).
       if (barWidth(1, 800) !== 8) throw new Error("got " + barWidth(1, 800));
     },
   },
   {
-    name: "barX: positions bars at their timestamp ratio",
+    name: "bar geometry: 200 bars fit narrow plot without overlap or overflow",
     fn: () => {
-      // 3 samples spread evenly over 19h, chart inner width 800px, bar 8px
-      const w = 800, bw = 8, n = 3, span = 19 * 3600 * 1000;
-      const t0 = 0, t1 = span / 2, t2 = span;
-      const x0 = barX(t0, t0, span, n, w, bw);
-      const x1 = barX(t1, t0, span, n, w, bw);
-      const x2 = barX(t2, t0, span, n, w, bw);
-      // First bar should be at the very left (clamped to 0)
-      if (x0 !== 0) throw new Error("first bar x=" + x0);
-      // Middle bar centered at chart center
-      if (Math.abs(x1 - (w / 2 - bw / 2)) > 1) throw new Error("middle bar x=" + x1);
-      // Last bar clamped to right edge
-      if (x2 !== w - bw) throw new Error("last bar x=" + x2);
+      const plotWidth = 328, n = 200;
+      const width = barWidth(n, plotWidth);
+      let previousRight = 0;
+      for (let i = 0; i < n; i++) {
+        const left = barCenterX(i, n, plotWidth, width) - width / 2;
+        if (left < previousRight - Number.EPSILON) {
+          throw new Error(`overlap at ${i}; left=${left} previousRight=${previousRight}`);
+        }
+        previousRight = left + width;
+      }
+      if (previousRight > plotWidth + Number.EPSILON) {
+        throw new Error(`overflow; right=${previousRight} plotWidth=${plotWidth}`);
+      }
     },
   },
   {
-    name: "barX: single sample centers on chart",
+    name: "barCenterX: single sample centers bar",
     fn: () => {
-      const x = barX(1234, 1234, 0, 1, 800, 8);
-      if (x !== (800 - 8) / 2) throw new Error("got " + x);
+      const x = barCenterX(0, 1, 800, 8);
+      if (x !== 400) throw new Error("got " + x);
     },
   },
   {
-    name: "barX: same-ts samples with n>1 return 0 (degenerate span)",
+    name: "barCenterX: n=0 returns 0 (degenerate)",
     fn: () => {
-      const x = barX(1234, 1234, 0, 2, 800, 8);
+      const x = barCenterX(0, 0, 800, 0);
       if (x !== 0) throw new Error("got " + x);
+    },
+  },
+  {
+    name: "bar hover follows visual index despite irregular timestamps",
+    fn: () => {
+      const points = [
+        { ts: 1 },
+        { ts: 2 },
+        { ts: 3 },
+        { ts: 1000000 },
+      ];
+      const plotWidth = 328;
+      const width = barWidth(points.length, plotWidth);
+      const mouseX = barCenterX(2, points.length, plotWidth, width);
+      const hovered = barIndexAtX(mouseX, points.length, plotWidth, width);
+      if (hovered !== 2) throw new Error("got " + hovered);
     },
   },
   // ---- history namespace ----
@@ -500,6 +606,108 @@ const tests = [
       const out = migrateLegacyBlob(blob, ns);
       if (out.migrated) throw new Error("already migrated, but flagged as migrated");
       if (!out.slice || out.slice.interval.length !== 1) throw new Error("slice missing");
+    },
+  },
+  // ---- seed / backup ----
+  {
+    name: "seedFakeHistory: interval sample count ≈ 7d at 5min sampling",
+    fn: () => {
+      const res = seedFakeHistory(7, 90);
+      if (!res.ok) throw new Error("ok flag");
+      // 7 days = 7 * 288 = 2016 samples (allow 1-2 sample boundary slack).
+      if (res.intervalSamples < 2014 || res.intervalSamples > 2018) {
+        throw new Error("intervalSamples out of range: " + res.intervalSamples);
+      }
+      // Weekly: 90 days = 90 / 7 = 12.86 windows × 2016 = ~25920
+      if (res.weeklySamples < 25900 || res.weeklySamples > 25940) {
+        throw new Error("weeklySamples out of range: " + res.weeklySamples);
+      }
+    },
+  },
+  {
+    name: "seedFakeHistory: produces varying remaining values (multiple buckets visible)",
+    fn: () => {
+      const res = seedFakeHistory(7, 90);
+      // Downsample to 200 buckets per window count and check that MOST
+      // buckets have a bar (avg remaining < 100 → USED > 0 → visible).
+      const dsI = downsample(res.interval, 200);
+      const dsW = downsample(res.weekly, 200);
+      const visibleI = dsI.filter(b => 100 - b.p > 0.5).length;
+      const visibleW = dsW.filter(b => 100 - b.p > 0.5).length;
+      // With sawtooth varying endRemaining per window, nearly every
+      // bucket should be visible. Allow ≥ 90% to absorb edge cases.
+      if (visibleI < dsI.length * 0.9) {
+        throw new Error(`interval visible=${visibleI}/${dsI.length}`);
+      }
+      if (visibleW < dsW.length * 0.9) {
+        throw new Error(`weekly visible=${visibleW}/${dsW.length}`);
+      }
+      // avg used for both should land somewhere reasonable (20-80%).
+      const avgI = dsI.reduce((s, b) => s + (100 - b.p), 0) / dsI.length;
+      const avgW = dsW.reduce((s, b) => s + (100 - b.p), 0) / dsW.length;
+      if (avgI < 20 || avgI > 80) throw new Error("interval avg out of range: " + avgI);
+      if (avgW < 20 || avgW > 80) throw new Error("weekly avg out of range: " + avgW);
+    },
+  },
+  {
+    name: "seedFakeHistory: deterministic for same timestamp seed",
+    fn: () => {
+      const fixed = 1700000000000;
+      const a = seedFakeHistory(7, 90, fixed);
+      const b = seedFakeHistory(7, 90, fixed);
+      if (a.intervalSamples !== b.intervalSamples) throw new Error("length mismatch");
+      if (a.interval[0].p !== b.interval[0].p) throw new Error("first sample mismatch");
+      if (a.interval[a.intervalSamples - 1].p !== b.interval[a.intervalSamples - 1].p) {
+        throw new Error("last sample mismatch");
+      }
+    },
+  },
+  {
+    name: "seedFakeHistory: respects custom retention days",
+    fn: () => {
+      const res = seedFakeHistory(1, 7);
+      // 1 day interval ≈ 288 samples
+      if (res.intervalSamples < 286 || res.intervalSamples > 290) {
+        throw new Error("1d interval count off: " + res.intervalSamples);
+      }
+      // 7d weekly ≈ 2016 samples
+      if (res.weeklySamples < 2014 || res.weeklySamples > 2018) {
+        throw new Error("7d weekly count off: " + res.weeklySamples);
+      }
+    },
+  },
+  {
+    name: "backup/restore round-trip preserves blob shape",
+    fn: () => {
+      const ns = namespaceOf("sk-cp-test");
+      const mainBlob = JSON.stringify({
+        [ns]: {
+          interval: [{ ts: 1, p: 80 }, { ts: 2, p: 70 }],
+          weekly: [{ ts: 1, p: 90 }],
+        },
+      });
+      const slot = backupState(mainBlob);
+      if (!hasBackup(slot)) throw new Error("hasBackup false after backup");
+      const res = restoreBackup(slot);
+      if (!res.ok) throw new Error("restore failed: " + (res.error || ""));
+      if (res.blob !== mainBlob) throw new Error("blob not preserved exactly");
+    },
+  },
+  {
+    name: "backup: empty main returns ok:false",
+    fn: () => {
+      const slot = backupState("");
+      if (hasBackup(slot)) throw new Error("hasBackup true for empty");
+      const res = restoreBackup(slot);
+      if (res.ok) throw new Error("restore on empty should fail");
+    },
+  },
+  {
+    name: "restore: corrupt backup returns ok:false with error",
+    fn: () => {
+      const res = restoreBackup("{not json");
+      if (res.ok) throw new Error("corrupt restore should fail");
+      if (!res.error) throw new Error("error missing");
     },
   },
 ];

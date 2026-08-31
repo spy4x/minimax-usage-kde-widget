@@ -4,12 +4,12 @@
     "Id": "org.spy4x.minimaxquota",
     "Name": "MiniMax Quota",
     "Description": "MiniMax M3 token plan 5h and weekly quota usage with reset countdowns and stats charts",
-    "Version": "1.5.0",
+    "Version": "1.5.7",
     "License": "MIT",
     "Website": "https://github.com/spy4x/minimax-usage-kde-widget",
     "Authors": [
       { "Name": "Anton Shubin", "Email": "anton@neatsoft.dev" }
-      ],
+    ],
     "Category": "System Information"
   },
   "X-Plasma-API-Minimum-Version": "6.0",

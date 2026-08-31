@@ -15,7 +15,6 @@ KCMUtils.SimpleKCM {
 
   // Aliases bind to control properties
   property alias cfg_refreshIntervalSec: refreshField.value
-  property alias cfg_historyEnabled: historyEnabledBox.checked
   property alias cfg_intervalRetentionDays: intervalRetentionField.value
   property alias cfg_weeklyRetentionDays: weeklyRetentionField.value
   property bool cfg_historyClearRequested: Plasmoid.configuration.historyClearRequested === true
@@ -76,12 +75,15 @@ KCMUtils.SimpleKCM {
       Kirigami.FormData.label: i18n("History & Stats")
     }
 
-    QQC2.CheckBox {
-      id: historyEnabledBox
-      Kirigami.FormData.label: i18n("Collect history:")
-      text: i18n("Store quota samples for the stats charts")
-      checked: configGeneral.cfg_historyEnabled !== false
-      onToggled: configGeneral.cfg_historyEnabled = checked
+    QQC2.Label {
+      Layout.fillWidth: true
+      Layout.bottomMargin: Kirigami.Units.smallSpacing
+      wrapMode: Text.Wrap
+      font.pixelSize: 10
+      opacity: 0.7
+      text: i18n("History is always collected while an API key is set, " +
+                 "keyed to this subscription so it isn't mixed with other " +
+                 "subscriptions and survives widget removal/re-add.")
     }
 
     QQC2.SpinBox {
@@ -93,7 +95,6 @@ KCMUtils.SimpleKCM {
       editable: true
       value: 7
       Layout.fillWidth: true
-      enabled: historyEnabledBox.checked
     }
 
     QQC2.SpinBox {
@@ -105,13 +106,11 @@ KCMUtils.SimpleKCM {
       editable: true
       value: 90
       Layout.fillWidth: true
-      enabled: historyEnabledBox.checked
     }
 
     QQC2.Button {
       text: i18n("Clear history now")
       Layout.fillWidth: true
-      enabled: historyEnabledBox.checked
       onClicked: clearConfirmDialog.open()
     }
 
@@ -119,9 +118,9 @@ KCMUtils.SimpleKCM {
       id: clearConfirmDialog
       title: i18n("Clear stored history?")
       QQC2.Label {
-        text: i18n("Removes every collected sample for both windows. " +
-                   "Charts will start empty until new data accumulates. " +
-                   "This does not affect the API key or other settings.")
+        text: i18n("Removes every collected sample for THIS subscription " +
+                   "key only. Charts will start empty until new data accumulates. " +
+                   "Other subscriptions (and their history) are unaffected.")
         wrapMode: Text.Wrap
       }
       standardButtons: Kirigami.Dialog.No | Kirigami.Dialog.Yes

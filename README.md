@@ -20,7 +20,8 @@ pacing your consumption against the window.
   red (< 30m reset).
 - **Stats view** with two bar charts: 5-hour window over the last 7 days,
   weekly window over the last 3 months. Shows current, average, and
-  peak usage. Click the **Stats** tab in the header to switch.
+  peak usage. Hover any bar to see the exact timestamp + value. Click
+  the **Stats** tab in the header to switch.
 - **Live-ticking** countdowns (subtract elapsed since fetch each second —
   no network call to decrement).
 - **Live clock** in the header (HH:MM:SS, ticks every second).
@@ -77,10 +78,12 @@ Right-click the widget → **Configure MiniMax Quota...**
 | **Refresh (sec)** | `300` | Poll interval. Range 60–3600. 5 min is conservative; lower if you want more responsive updates. |
 | **Endpoint** | `https://www.minimax.io/v1/token_plan/remains` | Override only if MiniMax changes the URL. |
 | **Layout** | `Horizontal` | `Horizontal` = cards side by side. `Vertical` = cards stacked (use for narrow panels). |
-| **Collect history** | `on` | When off, no samples are stored and the Stats tab shows an empty chart. |
 | **5h retention (days)** | `7` | Oldest 5-hour-window samples older than this are dropped on every save. |
 | **Weekly retention (days)** | `90` | Same, for the weekly window. |
-| **Clear history now** | — | Wipes stored samples for both windows after confirmation. |
+| **Clear history now** | — | Wipes stored samples for **this** subscription key only. Other subscriptions are unaffected. |
+
+History is always collected while an API key is configured, and is keyed
+to that key (hashed) so two subscriptions never share data.
 
 ## Reading the stats view
 
@@ -93,6 +96,12 @@ historical view. Two stacked bar charts:
   monthly reset cycles so you can compare how aggressively you used
   quota across billing cycles.
 
+Bars are positioned by **timestamp**, not by index — gaps between bars
+show time gaps, so a brand-new install with only a handful of samples
+displays as a few narrow ticks at their actual times, not as wide bars
+stretched across the whole chart. Hover any bar to see its exact
+timestamp + value.
+
 Each chart shows three numbers on the right: `now` (current usage,
 color-coded), `avg` (average used % over the window), and `peak`
 (highest used % reached). Bars are colored the same as the live rings:
@@ -101,6 +110,10 @@ cyan < 70%, orange < 90%, red ≥ 90%.
 Empty state: if you just installed, the chart shows *"Collecting data —
 check back after a few hours"*. The first sample lands within seconds of
 the first successful fetch.
+
+History is stored per subscription key (hashed). Removing and re-adding
+the widget keeps your data as long as the same API key is configured;
+switching to a different key starts a fresh history for that key.
 
 ## Reading the rings
 
@@ -193,8 +206,10 @@ node scripts/smoke-test.mjs
 ```
 
 This validates the response parsing, `formatDuration`, `usedFromRemaining`,
-history append/prune, and downsample logic without needing Plasma
-installed. 17/17 should pass.
+history append/prune, downsample logic, and the chart helpers
+(`fmtAxisDate`, `barX`, `barWidth`) + history namespace helpers
+(`namespaceOf`, `migrateLegacyBlob`) without needing Plasma installed.
+31/31 should pass.
 
 ### Iterate on QML
 
